@@ -202,7 +202,8 @@ public class RecoveryOrchestratorService {
             recoveryAttemptRepository.save(attempt);
 
             String eventType = switch (result.getStatus()) {
-                case SUCCESS, SENT, DELIVERED -> "RECOVERY_ATTEMPT_COMPLETED";
+                case SUCCESS -> "RECOVERY_ATTEMPT_SUCCEEDED";
+                case SENT, DELIVERED -> "RECOVERY_ATTEMPT_SENT";
                 case SKIPPED -> "RECOVERY_ATTEMPT_SKIPPED";
                 default -> "RECOVERY_ATTEMPT_FAILED";
             };

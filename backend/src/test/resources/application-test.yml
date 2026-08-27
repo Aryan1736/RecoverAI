@@ -35,3 +35,24 @@ gemini:
 razorpay:
   key-id: test-key-id
   key-secret: test-key-secret
+
+recoverai:
+  recovery:
+    base-url: https://test-pay.recoverai.io/r/
+    whatsapp:
+      provider: mock
+      sender-number: "+14155238886"
+      api-key: test-whatsapp-key
+    email:
+      provider: mock
+      from-address: test-recover@recoverai.io
+      from-name: "RecoverAI Test Recovery"
+      api-key: test-email-key
+    sms:
+      provider: mock
+      sender-id: TESTREC
+      api-key: test-sms-key
+    retry-charge:
+      provider: mock
+      auto-retry-enabled: true
+

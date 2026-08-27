@@ -268,7 +268,70 @@ RecoveryCase (OPEN) ──► AgentDecision ──► RecoveryOrchestratorServic
 4. **Terminal Case Guard**: Cases already in `RECOVERED`, `CANCELLED`, or `EXPIRED` status reject further recovery attempts (HTTP 400 Bad Request).
 5. **Channel Executor Abstraction**: `RecoveryActionExecutor` decouples channel dispatch mechanics (`WHATSAPP`, `EMAIL`, `SMS`, `RETRY_CHARGE`, `SMART_LINK`, `MANUAL`) with zero provider-specific API coupling and simulated mock dispatching.
 6. **Multi-Tenant Security**: Strict merchant verification on every query; AI raw responses and merchant credentials are never returned in public DTOs.
-7. **Audit Trail**: Records structured events (`RECOVERY_ATTEMPT_CREATED`, `RECOVERY_ATTEMPT_STARTED`, `RECOVERY_ATTEMPT_COMPLETED`, `RECOVERY_ATTEMPT_FAILED`) under `ActorType.SYSTEM`.
+7. **Audit Trail**: Records structured events (`RECOVERY_ATTEMPT_CREATED`, `RECOVERY_ATTEMPT_STARTED`, `RECOVERY_ATTEMPT_SENT`, `RECOVERY_ATTEMPT_SUCCEEDED`, `RECOVERY_ATTEMPT_FAILED`) under `ActorType.SYSTEM`.
+
+---
+
+## Recovery Communication & Execution Layer
+
+RecoverAI features a modular, extensible communication and recovery execution layer that decouples domain orchestration from external messaging networks (WhatsApp, Email, SMS) and payment gateways (Razorpay).
+
+### Architecture & Provider Abstraction
+```
+RecoveryOrchestratorService
+           │
+           ├── WhatsAppRecoveryExecutor  ──► WhatsAppProvider (MockWhatsAppProvider / Twilio / Meta Cloud API)
+           ├── EmailRecoveryExecutor     ──► EmailProvider (MockEmailProvider / SendGrid / Postmark)
+           ├── SmsRecoveryExecutor       ──► SmsProvider (MockSmsProvider / Twilio / Kaleyra)
+           ├── SmartLinkRecoveryExecutor ──► RecoveryLinkService (Configurable Safe URL Generator)
+           ├── RetryChargeRecoveryExecutor ─► PaymentRetryProvider (MockPaymentRetryProvider / Razorpay API)
+           ├── ManualRecoveryExecutor    ──► RecoveryLinkService (Queued Manual Review)
+           └── DefaultRecoveryActionExecutor (Fallback)
+```
+
+### Supported Channels & Behavior
+| Channel | Executor Class | Underlying Provider | Case Status Transition | Attempt Status |
+| :--- | :--- | :--- | :--- | :--- |
+| `WHATSAPP` | `WhatsAppRecoveryExecutor` | `WhatsAppProvider` | `OPEN` ➔ `IN_PROGRESS` | `SENT` |
+| `EMAIL` | `EmailRecoveryExecutor` | `EmailProvider` | `OPEN` ➔ `IN_PROGRESS` | `SENT` |
+| `SMS` | `SmsRecoveryExecutor` | `SmsProvider` | `OPEN` ➔ `IN_PROGRESS` | `SENT` |
+| `SMART_LINK` | `SmartLinkRecoveryExecutor` | `RecoveryLinkService` | `OPEN` ➔ `IN_PROGRESS` | `SENT` |
+| `RETRY_CHARGE` | `RetryChargeRecoveryExecutor` | `PaymentRetryProvider` | `OPEN` ➔ `RECOVERED` (on success) | `SUCCESS` / `FAILED` |
+| `MANUAL` | `ManualRecoveryExecutor` | `RecoveryLinkService` | `OPEN` ➔ `IN_PROGRESS` | `SENT` |
+
+### Local & Test Providers
+All communication providers default to safe, deterministic local mock implementations (`MockWhatsAppProvider`, `MockEmailProvider`, `MockSmsProvider`, `MockPaymentRetryProvider`):
+- **Zero Real External Calls**: No live messages are dispatched and no live cards are charged during local development or test suite execution.
+- **PII-Safe Logging**: Phone numbers and email addresses are masked before writing to server logs (e.g. `+919876****10`, `a***@example.com`).
+- **Deterministic Metadata**: Simulated delivery IDs (`mock_wa_...`, `mock_email_...`, `mock_pay_...`) and JSON metadata payloads are returned for full lifecycle verification.
+
+### Safe Recovery Link Generation
+The `RecoveryLinkService` generates recovery URLs with configurable base URLs (`recoverai.recovery.base-url`):
+- Formats links cleanly as `${baseUrl}${caseId}` without exposing internal secrets, API keys, or raw merchant tokens.
+- Supports customizable domain routing in development (`http://localhost:5173/r/`) and production (`https://pay.recoverai.io/r/`).
+
+### Configuration Properties
+```yaml
+recoverai:
+  recovery:
+    base-url: ${RECOVERY_BASE_URL:https://pay.recoverai.io/r/}
+    whatsapp:
+      provider: ${WHATSAPP_PROVIDER:mock}
+      sender-number: ${WHATSAPP_SENDER_NUMBER:+14155238886}
+      api-key: ${WHATSAPP_API_KEY:}
+    email:
+      provider: ${EMAIL_PROVIDER:mock}
+      from-address: ${EMAIL_FROM_ADDRESS:recover@recoverai.io}
+      from-name: ${EMAIL_FROM_NAME:RecoverAI Payment Recovery}
+      api-key: ${EMAIL_API_KEY:}
+    sms:
+      provider: ${SMS_PROVIDER:mock}
+      sender-id: ${SMS_SENDER_ID:RECOVER}
+      api-key: ${SMS_API_KEY:}
+    retry-charge:
+      provider: ${RETRY_CHARGE_PROVIDER:mock}
+      auto-retry-enabled: ${RETRY_CHARGE_ENABLED:true}
+```
 
 ---
 
@@ -279,6 +342,8 @@ RecoveryCase (OPEN) ──► AgentDecision ──► RecoveryOrchestratorServic
   - `feature/database-schema`: Core domain entities (Merchant, Customer, Payment, RecoveryCase, RecoveryAttempt, AgentDecision, AuditEvent) with Flyway V1 and V2 migrations.
   - `feature/razorpay-payment-ingestion`: Robust Razorpay webhook ingestion endpoint (`POST /api/v1/webhooks/razorpay`), HMAC-SHA256 constant-time verification, multi-tenant merchant resolution, customer/payment upserting, Flyway V3 `webhook_events` idempotency tracking, deterministic failure categorization, RecoveryCase generation, and audit logging.
   - `feature/ai-failure-diagnosis-engine`: Google Gemini AI failure diagnosis engine (`AIDiagnosisService`, `GeminiClient`, `AIDiagnosisController`), structured JSON recommendations, confidence score validation, tenant isolation, PII masking, `AgentDecision` persistence.
-  - `feature/recovery-orchestration`: Recovery Orchestration layer (`RecoveryOrchestratorService`, `RecoveryActionExecutor`, `DefaultRecoveryActionExecutor`, `RecoveryOrchestrationController`), lifecycle state machine, DB-backed attempt sequencing, duplicate protection, multi-tenant scoping, audit logging, and test suite (87 tests passing).
+  - `feature/recovery-orchestration`: Recovery Orchestration layer (`RecoveryOrchestratorService`, `RecoveryActionExecutor`, `DefaultRecoveryActionExecutor`, `RecoveryOrchestrationController`), lifecycle state machine, DB-backed attempt sequencing, duplicate protection, multi-tenant scoping, and audit logging.
+  - `feature/recovery-communication`: Recovery Communication & Execution Layer (`WhatsAppRecoveryExecutor`, `EmailRecoveryExecutor`, `SmsRecoveryExecutor`, `SmartLinkRecoveryExecutor`, `RetryChargeRecoveryExecutor`, `ManualRecoveryExecutor`, `DefaultRecoveryLinkService`, safe mock providers, configuration properties, and 122 automated tests passing).
+
 
 

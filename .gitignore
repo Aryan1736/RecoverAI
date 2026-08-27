@@ -1,0 +1,44 @@
+# Environment variables & secrets
+.env
+.env.*
+!.env.example
+secrets/
+*.pem
+*.key
+
+# Build and dependency directories
+target/
+**/target/
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+build/
+**/build/
+.gradle/
+out/
+
+# IDE and Editor files
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+.settings/
+.project
+.classpath
+.factorypath
+
+# Logs
+logs/
+**/logs/
+*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Misc
+.cache/
+.temp/
+.tmp/

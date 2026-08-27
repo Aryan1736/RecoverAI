@@ -28,6 +28,9 @@ cors:
 gemini:
   api-key: test-api-key
   model: gemini-3.7-flash
+  base-url: http://localhost:8089/v1beta
+  connect-timeout-ms: 1000
+  read-timeout-ms: 2000
 
 razorpay:
   key-id: test-key-id

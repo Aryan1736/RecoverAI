@@ -7,6 +7,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -27,6 +28,10 @@ public interface RecoveryAttemptRepository extends JpaRepository<RecoveryAttempt
     Optional<RecoveryAttempt> findByIdAndMerchantId(UUID id, UUID merchantId);
 
     Optional<RecoveryAttempt> findByRecoveryCaseIdAndAttemptNumber(UUID recoveryCaseId, int attemptNumber);
+
+    Optional<RecoveryAttempt> findTopByRecoveryCaseIdOrderByAttemptNumberDesc(UUID recoveryCaseId);
+
+    boolean existsByRecoveryCaseIdAndStatusIn(UUID recoveryCaseId, Collection<RecoveryAttemptStatus> statuses);
 
     long countByRecoveryCaseId(UUID recoveryCaseId);
 }

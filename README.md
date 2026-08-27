@@ -219,12 +219,66 @@ Failed Payment ──► RecoveryCase ──► AIDiagnosisService ──► Gem
 
 ---
 
+## Recovery Orchestration Layer
+
+RecoverAI provides an automated and bounded Recovery Orchestration layer (`RecoveryOrchestratorService`) that consumes AI `AgentDecision` records, evaluates domain lifecycle constraints, safely sequences sequential attempts, and dispatches recovery actions through a clean channel executor abstraction.
+
+### Orchestration Flow
+```
+RecoveryCase (OPEN) ──► AgentDecision ──► RecoveryOrchestratorService ──► RecoveryActionExecutor ──► RecoveryAttempt & AuditEvent
+                                                     │
+                                                     ├── Sequences attempt_number (DB-backed)
+                                                     ├── Case state: OPEN ➔ IN_PROGRESS
+                                                     ├── Attempt state: SCHEDULED ➔ IN_FLIGHT ➔ SENT / SUCCESS / FAILED
+                                                     └── Multi-tenant isolation & idempotency guard
+```
+
+### Endpoint Specification
+- **URL**: `POST /api/v1/recovery-cases/{recoveryCaseId}/orchestrate`
+- **Header**: `X-Merchant-Id: <uuid>`
+- **Alternative URL**: `POST /api/v1/merchants/{merchantId}/recovery-cases/{recoveryCaseId}/orchestrate`
+
+### Orchestration Response Schema
+```json
+{
+  "id": "uuid",
+  "recoveryCaseId": "uuid",
+  "merchantId": "uuid",
+  "attemptNumber": 1,
+  "channel": "WHATSAPP",
+  "status": "SENT",
+  "scheduledAt": "2026-08-28T00:00:00Z",
+  "executedAt": "2026-08-28T00:00:01Z",
+  "completedAt": "2026-08-28T00:00:01Z",
+  "resultCode": "WHATSAPP_DISPATCHED",
+  "resultMessage": "Simulated WhatsApp message dispatched to customer",
+  "recoveryLink": "https://pay.recoverai.io/r/{caseId}",
+  "createdAt": "2026-08-28T00:00:00Z",
+  "updatedAt": "2026-08-28T00:00:01Z"
+}
+```
+
+### Key Guarantees
+1. **DB-Backed Safe Sequencing**: Attempt numbers are sequentially computed from persistent database records (`findTopByRecoveryCaseIdOrderByAttemptNumberDesc`) backed by the database uniqueness constraint `(recovery_case_id, attempt_number)`.
+2. **Idempotency & Concurrent Conflict Protection**: Active attempts in `SCHEDULED` or `IN_FLIGHT` state block duplicate orchestration calls (HTTP 409 Conflict).
+3. **Lifecycle Management**:
+   - `RecoveryCase` transitions from `OPEN` to `IN_PROGRESS` upon initiation.
+   - `RecoveryAttempt` transitions from `SCHEDULED` ➔ `IN_FLIGHT` ➔ `SENT` / `SUCCESS` / `FAILED` / `SKIPPED`.
+   - On immediate success (e.g. `RETRY_CHARGE`), the case status advances to `RECOVERED`.
+4. **Terminal Case Guard**: Cases already in `RECOVERED`, `CANCELLED`, or `EXPIRED` status reject further recovery attempts (HTTP 400 Bad Request).
+5. **Channel Executor Abstraction**: `RecoveryActionExecutor` decouples channel dispatch mechanics (`WHATSAPP`, `EMAIL`, `SMS`, `RETRY_CHARGE`, `SMART_LINK`, `MANUAL`) with zero provider-specific API coupling and simulated mock dispatching.
+6. **Multi-Tenant Security**: Strict merchant verification on every query; AI raw responses and merchant credentials are never returned in public DTOs.
+7. **Audit Trail**: Records structured events (`RECOVERY_ATTEMPT_CREATED`, `RECOVERY_ATTEMPT_STARTED`, `RECOVERY_ATTEMPT_COMPLETED`, `RECOVERY_ATTEMPT_FAILED`) under `ActorType.SYSTEM`.
+
+---
+
 ## Current Project Status
 
 - **Implemented Features**:
   - `feature/project-foundation`: Spring Boot 3.4.x + Java 21 foundation, Actuator health, CORS, Vite + React shell.
   - `feature/database-schema`: Core domain entities (Merchant, Customer, Payment, RecoveryCase, RecoveryAttempt, AgentDecision, AuditEvent) with Flyway V1 and V2 migrations.
   - `feature/razorpay-payment-ingestion`: Robust Razorpay webhook ingestion endpoint (`POST /api/v1/webhooks/razorpay`), HMAC-SHA256 constant-time verification, multi-tenant merchant resolution, customer/payment upserting, Flyway V3 `webhook_events` idempotency tracking, deterministic failure categorization, RecoveryCase generation, and audit logging.
-  - `feature/ai-failure-diagnosis-engine`: Google Gemini AI failure diagnosis engine (`AIDiagnosisService`, `GeminiClient`, `AIDiagnosisController`), structured JSON recommendations, confidence score validation, tenant isolation, PII masking, `AgentDecision` persistence, and comprehensive test suite (70 tests passing).
+  - `feature/ai-failure-diagnosis-engine`: Google Gemini AI failure diagnosis engine (`AIDiagnosisService`, `GeminiClient`, `AIDiagnosisController`), structured JSON recommendations, confidence score validation, tenant isolation, PII masking, `AgentDecision` persistence.
+  - `feature/recovery-orchestration`: Recovery Orchestration layer (`RecoveryOrchestratorService`, `RecoveryActionExecutor`, `DefaultRecoveryActionExecutor`, `RecoveryOrchestrationController`), lifecycle state machine, DB-backed attempt sequencing, duplicate protection, multi-tenant scoping, audit logging, and test suite (87 tests passing).
 
 

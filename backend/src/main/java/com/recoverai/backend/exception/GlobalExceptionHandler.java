@@ -69,6 +69,40 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
     }
 
+    @ExceptionHandler(InvalidRecoveryCaseStateException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidRecoveryCaseStateException(InvalidRecoveryCaseStateException ex) {
+        log.warn("Invalid recovery case state: {}", ex.getMessage());
+        ApiErrorResponse response = new ApiErrorResponse(
+                HttpStatus.BAD_REQUEST.value(),
+                "Bad Request",
+                ex.getMessage()
+        );
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    }
+
+    @ExceptionHandler(AgentDecisionNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleAgentDecisionNotFoundException(AgentDecisionNotFoundException ex) {
+        log.warn("Agent decision not found: {}", ex.getMessage());
+        ApiErrorResponse response = new ApiErrorResponse(
+                HttpStatus.NOT_FOUND.value(),
+                "Not Found",
+                ex.getMessage()
+        );
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+    }
+
+    @ExceptionHandler(DuplicateOrchestrationException.class)
+    public ResponseEntity<ApiErrorResponse> handleDuplicateOrchestrationException(DuplicateOrchestrationException ex) {
+        log.warn("Duplicate orchestration attempt: {}", ex.getMessage());
+        ApiErrorResponse response = new ApiErrorResponse(
+                HttpStatus.CONFLICT.value(),
+                "Conflict",
+                ex.getMessage()
+        );
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+    }
+
+
     @ExceptionHandler(GeminiApiException.class)
     public ResponseEntity<ApiErrorResponse> handleGeminiApiException(GeminiApiException ex) {
         log.error("Gemini API invocation error: {}", ex.getMessage());

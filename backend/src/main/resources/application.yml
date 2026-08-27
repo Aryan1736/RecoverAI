@@ -44,3 +44,24 @@ gemini:
 razorpay:
   key-id: ${RAZORPAY_KEY_ID:}
   key-secret: ${RAZORPAY_KEY_SECRET:}
+
+recoverai:
+  recovery:
+    base-url: ${RECOVERY_BASE_URL:https://pay.recoverai.io/r/}
+    whatsapp:
+      provider: ${WHATSAPP_PROVIDER:mock}
+      sender-number: ${WHATSAPP_SENDER_NUMBER:+14155238886}
+      api-key: ${WHATSAPP_API_KEY:}
+    email:
+      provider: ${EMAIL_PROVIDER:mock}
+      from-address: ${EMAIL_FROM_ADDRESS:recover@recoverai.io}
+      from-name: ${EMAIL_FROM_NAME:RecoverAI Payment Recovery}
+      api-key: ${EMAIL_API_KEY:}
+    sms:
+      provider: ${SMS_PROVIDER:mock}
+      sender-id: ${SMS_SENDER_ID:RECOVER}
+      api-key: ${SMS_API_KEY:}
+    retry-charge:
+      provider: ${RETRY_CHARGE_PROVIDER:mock}
+      auto-retry-enabled: ${RETRY_CHARGE_ENABLED:true}
+

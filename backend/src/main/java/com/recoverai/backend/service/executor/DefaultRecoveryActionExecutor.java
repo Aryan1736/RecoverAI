@@ -4,6 +4,7 @@ import com.recoverai.backend.entity.Customer;
 import com.recoverai.backend.entity.RecoveryAttempt;
 import com.recoverai.backend.entity.RecoveryCase;
 import com.recoverai.backend.entity.enums.RecoveryChannel;
+import com.recoverai.backend.service.link.RecoveryLinkService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -15,11 +16,15 @@ public class DefaultRecoveryActionExecutor implements RecoveryActionExecutor {
 
     private static final Logger log = LoggerFactory.getLogger(DefaultRecoveryActionExecutor.class);
 
-    private static final String BASE_RECOVERY_URL = "https://pay.recoverai.io/r/";
+    private final RecoveryLinkService recoveryLinkService;
+
+    public DefaultRecoveryActionExecutor(RecoveryLinkService recoveryLinkService) {
+        this.recoveryLinkService = recoveryLinkService;
+    }
 
     @Override
     public boolean supports(RecoveryChannel channel) {
-        // Supports all standard channels as the default mock/simulated executor
+        // Supports all standard channels as the default mock/simulated executor fallback
         return true;
     }
 
@@ -30,10 +35,11 @@ public class DefaultRecoveryActionExecutor implements RecoveryActionExecutor {
         Customer customer = recoveryCase.getCustomer();
         String customerRef = customer != null && customer.getEmail() != null ? maskEmail(customer.getEmail()) : "N/A";
 
-        log.info("Executing recovery action for attemptId={}, caseId={}, channel={}, customer={}",
+        log.info("Executing fallback recovery action for attemptId={}, caseId={}, channel={}, customer={}",
                 attempt.getId(), caseId, channel, customerRef);
 
-        String recoveryLink = BASE_RECOVERY_URL + caseId;
+        String recoveryLink = recoveryLinkService.generateRecoveryLink(recoveryCase);
+
 
         switch (channel) {
             case WHATSAPP:

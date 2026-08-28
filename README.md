@@ -331,7 +331,132 @@ recoverai:
     retry-charge:
       provider: ${RETRY_CHARGE_PROVIDER:mock}
       auto-retry-enabled: ${RETRY_CHARGE_ENABLED:true}
+    webhook:
+      signature-header: ${RECOVERY_OUTCOME_WEBHOOK_SIGNATURE_HEADER:X-Recovery-Signature}
 ```
+
+---
+
+## Recovery Outcome Webhooks & Attempt Reconciliation
+
+RecoverAI provides a secure, multi-tenant webhook ingestion layer for asynchronous communication and payment providers to report outcomes for dispatched `RecoveryAttempt` entities.
+
+### Flow Architecture
+```
+┌─────────────────────────┐
+│     AgentDecision       │
+└───────────┬─────────────┘
+            ▼
+┌─────────────────────────┐
+│RecoveryOrchestratorSvc  │
+└───────────┬─────────────┘
+            ▼
+┌─────────────────────────┐
+│     RecoveryAttempt     │
+└───────────┬─────────────┘
+            ▼
+┌─────────────────────────┐
+│   Provider / Executor   │
+└───────────┬─────────────┘
+            ▼
+ [ Asynchronous Outcome ]
+            ▼
+┌─────────────────────────┐
+│POST /api/v1/webhooks/   │
+│    recovery-outcome     │
+└───────────┬─────────────┘
+            ▼
+┌─────────────────────────┐
+│HMAC-SHA256 Verification │
+└───────────┬─────────────┘
+            ▼
+┌─────────────────────────┐
+│  Durable Idempotency    │
+│(recovery_outcome_events)│
+└───────────┬─────────────┘
+            ▼
+┌─────────────────────────┐
+│  State Machine Valid.   │
+│(RecoveryAttemptStateMch)│
+└───────────┬─────────────┘
+            ▼
+┌─────────────────────────┐
+│Reconcile RecoveryAttempt│
+└───────────┬─────────────┘
+            ▼
+┌─────────────────────────┐
+│ Reconcile RecoveryCase  │
+│ (RECOVERED on SUCCESS)  │
+└───────────┬─────────────┘
+            ▼
+┌─────────────────────────┐
+│       AuditEvent        │
+└─────────────────────────┘
+```
+
+### Endpoint Specification
+- **URL**: `POST /api/v1/webhooks/recovery-outcome`
+- **Content-Type**: `application/json`
+- **Headers**:
+  - `X-Recovery-Signature: <hmac_sha256_hex>` (or `X-Webhook-Signature`)
+
+#### Sample Request Payload
+```json
+{
+  "providerEventId": "evt_wa_cb_98765",
+  "merchantId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "recoveryAttemptId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "outcomeStatus": "SUCCESS",
+  "provider": "WHATSAPP",
+  "providerReference": "wa_msg_98765",
+  "occurredAt": "2026-08-28T18:00:00Z",
+  "resultCode": "PAID_VIA_SMART_LINK",
+  "resultMessage": "Customer completed payment via smart link",
+  "metadata": "{\"paymentMethod\":\"UPI\",\"gatewayPaymentId\":\"pay_test123\"}"
+}
+```
+
+#### Sample Response Payload
+```json
+{
+  "status": "accepted"
+}
+```
+
+### State Machine Transition Rules
+The `RecoveryAttemptStateMachine` deterministically enforces allowed status lifecycles and forbids backward transitions and mutations to terminal states:
+- `SCHEDULED` ➔ `IN_FLIGHT`, `FAILED`, `SKIPPED`
+- `IN_FLIGHT` ➔ `SENT`, `DELIVERED`, `CLICKED`, `SUCCESS`, `FAILED`
+- `SENT` ➔ `DELIVERED`, `CLICKED`, `SUCCESS`, `FAILED`
+- `DELIVERED` ➔ `CLICKED`, `SUCCESS`, `FAILED`
+- `CLICKED` ➔ `SUCCESS`, `FAILED`
+- Terminal States: `SUCCESS`, `FAILED`, `SKIPPED` (rejects backwards transitions like `SUCCESS` ➔ `IN_FLIGHT`, `FAILED` ➔ `SENT`).
+
+### RecoveryCase Reconciliation & Amount Integrity
+- When an attempt transitions to intermediate states (`SENT`, `DELIVERED`, `CLICKED`, `IN_FLIGHT`), `RecoveryCase` remains `IN_PROGRESS`.
+- When an attempt transitions to `SUCCESS`:
+  - `RecoveryAttempt` status is set to `SUCCESS`, `completedAt` populated.
+  - `RecoveryCase` transitions to `RECOVERED`, `recoveredAt` populated.
+  - `recoveredAmount` is derived from trusted persistent data (`estimatedRecoverableAmount`), preventing external client/webhook manipulation.
+  - Associated `Payment` status is updated to `CAPTURED`.
+- When an attempt transitions to `FAILED`:
+  - `RecoveryAttempt` status is set to `FAILED`, `completedAt` populated.
+  - `RecoveryCase` remains `IN_PROGRESS` (not recovered) so future attempts can be scheduled.
+
+### Multi-Tenant Isolation & Concurrency Safety
+1. **Tenant Authorization**: Lookups are strictly merchant-scoped (`findByIdAndMerchantId`). Webhooks signed for Merchant A can never read or mutate Merchant B's attempts, cases, or payments (returns HTTP 404 with safe error details).
+2. **Durable Idempotency**: Persistent `recovery_outcome_events` table (Flyway V4 migration) with unique constraint `(merchant_id, provider, provider_event_id)`.
+3. **Concurrent Duplicate Protection**: If two identical webhook deliveries arrive concurrently, the database unique constraint prevents duplicate processing; subsequent deliveries return HTTP 200 `{ "status": "accepted" }` and emit `RECOVERY_OUTCOME_DUPLICATE` audit events without duplicate mutations.
+
+### Audit Events
+Structured audit logging via `AuditService` (`ActorType.WEBHOOK`):
+- `RECOVERY_OUTCOME_RECEIVED`
+- `RECOVERY_OUTCOME_PROCESSED`
+- `RECOVERY_OUTCOME_DUPLICATE`
+- `RECOVERY_OUTCOME_REJECTED`
+- `RECOVERY_ATTEMPT_STATUS_UPDATED`
+- `RECOVERY_ATTEMPT_SUCCEEDED`
+- `RECOVERY_ATTEMPT_FAILED`
 
 ---
 
@@ -343,7 +468,8 @@ recoverai:
   - `feature/razorpay-payment-ingestion`: Robust Razorpay webhook ingestion endpoint (`POST /api/v1/webhooks/razorpay`), HMAC-SHA256 constant-time verification, multi-tenant merchant resolution, customer/payment upserting, Flyway V3 `webhook_events` idempotency tracking, deterministic failure categorization, RecoveryCase generation, and audit logging.
   - `feature/ai-failure-diagnosis-engine`: Google Gemini AI failure diagnosis engine (`AIDiagnosisService`, `GeminiClient`, `AIDiagnosisController`), structured JSON recommendations, confidence score validation, tenant isolation, PII masking, `AgentDecision` persistence.
   - `feature/recovery-orchestration`: Recovery Orchestration layer (`RecoveryOrchestratorService`, `RecoveryActionExecutor`, `DefaultRecoveryActionExecutor`, `RecoveryOrchestrationController`), lifecycle state machine, DB-backed attempt sequencing, duplicate protection, multi-tenant scoping, and audit logging.
-  - `feature/recovery-communication`: Recovery Communication & Execution Layer (`WhatsAppRecoveryExecutor`, `EmailRecoveryExecutor`, `SmsRecoveryExecutor`, `SmartLinkRecoveryExecutor`, `RetryChargeRecoveryExecutor`, `ManualRecoveryExecutor`, `DefaultRecoveryLinkService`, safe mock providers, configuration properties, and 122 automated tests passing).
+  - `feature/recovery-communication`: Recovery Communication & Execution Layer (`WhatsAppRecoveryExecutor`, `EmailRecoveryExecutor`, `SmsRecoveryExecutor`, `SmartLinkRecoveryExecutor`, `RetryChargeRecoveryExecutor`, `ManualRecoveryExecutor`, `DefaultRecoveryLinkService`, safe mock providers, configuration properties).
+  - `feature/recovery-outcome-webhooks`: Recovery Outcome Webhook & Attempt Reconciliation Layer (`POST /api/v1/webhooks/recovery-outcome`, `RecoveryOutcomeService`, `RecoveryAttemptStateMachine`, `RecoveryOutcomeSignatureVerifier`, Flyway V4 `recovery_outcome_events` idempotency tracking, trusted case reconciliation, multi-tenant isolation, structured audit trails, and 197 passing automated tests).
 
 
 

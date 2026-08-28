@@ -61,5 +61,11 @@ recoverai:
       enabled: false
       polling-interval-ms: 5000
       batch-size: 50
+  security:
+    jwt:
+      secret: recoverai-test-jwt-signing-secret-key-must-be-at-least-256-bits-long
+      expiration-ms: 3600000
+      issuer: RecoverAITest
+
 
 

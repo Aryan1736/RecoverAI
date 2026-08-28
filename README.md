@@ -8,6 +8,7 @@ RecoverAI is an AI-powered revenue recovery system for failed payment transactio
 
 ### Backend
 - **Language & Framework**: Java 21, Spring Boot 3.4.x
+- **Security & Authentication**: Spring Security 6, JJWT (io.jsonwebtoken 0.12.x), BCrypt Password Hashing
 - **Build Tool**: Maven
 - **Persistence & Migration**: Spring Data JPA, PostgreSQL 16, Flyway
 - **Observability & Diagnostics**: Spring Boot Actuator
@@ -56,6 +57,9 @@ cp .env.example .env
 | `GEMINI_MODEL` | Gemini model identifier | `gemini-3.7-flash` |
 | `RAZORPAY_KEY_ID` | Razorpay Key ID | `<your_razorpay_key_id>` |
 | `RAZORPAY_KEY_SECRET` | Razorpay Key Secret | `<your_razorpay_key_secret>` |
+| `JWT_SECRET` | 256-bit signing key for JWT HMAC-SHA256 tokens | `<your_secure_256_bit_jwt_secret>` |
+| `JWT_EXPIRATION_MS` | Access token lifespan in milliseconds | `86400000` (24h) |
+| `JWT_ISSUER` | JWT Issuer claim | `RecoverAI` |
 
 ### Frontend Required Variables
 In `frontend/.env` (or `frontend/.env.example`):
@@ -560,6 +564,167 @@ RecoverAI provides an automated and resilient Recovery Scheduling system (`Recov
 
 ---
 
+## Merchant Authentication & JWT Security
+
+RecoverAI features a production-grade merchant authentication and authorization subsystem built on **Spring Security 6**, **JJWT (io.jsonwebtoken 0.12.x)**, and **BCrypt password hashing**. It replaces untrusted `X-Merchant-Id` header authentication with cryptographically signed JSON Web Tokens (JWT) while strictly preserving multi-tenant isolation.
+
+```
+                    ┌─────────────────────────┐
+                    │ Merchant Client / UI    │
+                    └───────────┬─────────────┘
+                                │
+        1. POST /api/v1/auth/login (email + password)
+                                │
+                                ▼
+                    ┌─────────────────────────┐
+                    │       AuthService       │
+                    │ - BCrypt match password │
+                    │ - Issue signed JWT      │
+                    └───────────┬─────────────┘
+                                │
+              2. Returns Bearer Access Token (JWT)
+                                │
+                                ▼
+   3. Requests with `Authorization: Bearer <jwt>`
+                                │
+                                ▼
+                    ┌─────────────────────────┐
+                    │ JwtAuthenticationFilter │
+                    │ - Verify HMAC signature │
+                    │ - Verify expiration     │
+                    │ - Set MerchantPrincipal │
+                    └───────────┬─────────────┘
+                                │
+                                ▼
+         ┌──────────────────────────────────────────────────┐
+         │ Multi-Tenant Protected Business Endpoints        │
+         │ - Auth merchant ID from JWT is authoritative     │
+         │ - Header/path spoofing rejected (403 Forbidden)  │
+         │ - Repository queries scoped to merchant          │
+         └──────────────────────────────────────────────────┘
+```
+
+### Endpoints Specification
+
+#### 1. Merchant Registration
+- **URL**: `POST /api/v1/auth/register`
+- **Access**: Public
+
+##### Request Body
+```json
+{
+  "name": "Acme Retailers Pvt Ltd",
+  "email": "payments@acmeretail.com",
+  "password": "StrongPassword123!",
+  "razorpayAccountId": "acc_123456789",
+  "webhookSecret": "whsec_customsecret"
+}
+```
+*Note: `razorpayAccountId` and `webhookSecret` are optional. If `webhookSecret` is omitted, a cryptographically secure secret is generated automatically.*
+
+##### Response Body (`201 Created`)
+```json
+{
+  "id": "78328114-68f4-411a-85b4-d5ebdb932371",
+  "name": "Acme Retailers Pvt Ltd",
+  "email": "payments@acmeretail.com",
+  "razorpayAccountId": "acc_123456789",
+  "status": "ACTIVE",
+  "createdAt": "2026-08-28T18:00:00Z",
+  "updatedAt": "2026-08-28T18:00:00Z"
+}
+```
+*Sensitive fields like `passwordHash` and `webhookSecret` are never exposed in response DTOs.*
+
+---
+
+#### 2. Merchant Login
+- **URL**: `POST /api/v1/auth/login`
+- **Access**: Public
+
+##### Request Body
+```json
+{
+  "email": "payments@acmeretail.com",
+  "password": "StrongPassword123!"
+}
+```
+
+##### Response Body (`200 OK`)
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJSZWNvdmVyQUkiLCJzdWIiOiI3ODMyODExNC02OGY0LTQxMWEtODViNC1kNWViZGI5MzIzNzEiLCJtZXJjaGFudElkIjoiNzgzMjgxMTQtNjhmNC00MTFhLTg1YjQtZDVlYmRiOTMyMzcxIiwiZW1haWwiOiJwYXltZW50c0BhY21lcmV0YWlsLmNvbSIsIm5hbWUiOiJBY21lIFJldGFpbGVycyBQdnQgTHRkIiwicm9sZSI6IlJPTEVfTUVSQ0hBTlQiLCJpYXQiOjE3NTY0MDY0MDAsImV4cCI6MTc1NjQ5MjgwMH0.signature",
+  "tokenType": "Bearer",
+  "expiresInMs": 86400000,
+  "merchant": {
+    "id": "78328114-68f4-411a-85b4-d5ebdb932371",
+    "name": "Acme Retailers Pvt Ltd",
+    "email": "payments@acmeretail.com",
+    "razorpayAccountId": "acc_123456789",
+    "status": "ACTIVE",
+    "createdAt": "2026-08-28T18:00:00Z",
+    "updatedAt": "2026-08-28T18:00:00Z"
+  }
+}
+```
+
+---
+
+### Protected APIs & Authorization Header Format
+
+All business APIs require the JWT token to be supplied in the standard HTTP header:
+```http
+Authorization: Bearer <jwt-token>
+```
+
+| Endpoint Path | Method | Access Level | Description |
+| :--- | :--- | :--- | :--- |
+| `/api/v1/auth/register` | `POST` | Public | Merchant registration |
+| `/api/v1/auth/login` | `POST` | Public | Merchant authentication & JWT issuance |
+| `/api/v1/health` | `GET` | Public | Application health check |
+| `/actuator/health` | `GET` | Public | Spring Boot Actuator health probe |
+| `/api/v1/webhooks/razorpay` | `POST` | Public (HMAC Verified) | Razorpay payment failure ingestion (via `X-Razorpay-Signature`) |
+| `/api/v1/webhooks/recovery-outcome` | `POST` | Public (HMAC Verified) | Recovery outcome callback (via `X-Recovery-Signature`) |
+| `/api/v1/recovery-cases/{id}/diagnose` | `POST` | Authenticated | Trigger AI diagnosis for a case |
+| `/api/v1/recovery-cases/{id}/orchestrate` | `POST` | Authenticated | Trigger immediate recovery execution |
+| `/api/v1/recovery-cases/{id}/schedule` | `POST` | Authenticated | Schedule a recovery attempt |
+
+---
+
+### Security Architecture & Design Decisions
+
+1. **Deterministic Multi-Tenant Scoping**:
+   - The authenticated merchant ID extracted from the validated JWT token is the **authoritative identity**.
+   - If a client provides an explicit `X-Merchant-Id` header or path variable `/merchants/{merchantId}/...` that belongs to a *different* merchant, the system rejects the request immediately with **403 Forbidden** (`TenantMismatchException`).
+   - Repository queries remain strictly tenant-scoped (e.g. `findByIdAndMerchantId`).
+2. **Password Security**:
+   - Passwords are encrypted using Spring Security's `BCryptPasswordEncoder` with a secure cost factor.
+   - Plaintext passwords are never stored in the database or logged in application logs.
+   - Salting is handled automatically and uniquely per hash.
+3. **JWT Cryptographic Integrity**:
+   - Signed using HMAC-SHA256 with a 256-bit secret key.
+   - Token payload includes `sub` (Merchant ID), `merchantId`, `email`, `name`, `role`, `iat`, `exp`, and `iss`.
+   - Tampered, expired, or malformed tokens are intercepted by `JwtAuthenticationFilter` and rejected with `401 Unauthorized`.
+4. **Webhook Security Distinction**:
+   - Webhook endpoints (`/api/v1/webhooks/**`) remain open to external automated callers (Razorpay gateway and recovery delivery providers) without requiring merchant JWT access tokens.
+   - Webhooks are protected via constant-time HMAC-SHA256 signature verification (`X-Razorpay-Signature`, `X-Recovery-Signature`) against each merchant's secret.
+5. **Standardized Error Handling**:
+   - Authentication errors (`InvalidCredentialsException`, `AuthenticationException`) return standardized JSON `ApiErrorResponse` (`401 Unauthorized`).
+   - Authorization failures return `403 Forbidden`.
+   - Duplicate registrations return `409 Conflict`.
+   - Internal credentials, secrets, and stack traces are never exposed in error responses.
+
+---
+
+### JWT Security Configuration Properties
+| Property | Environment Variable | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `recoverai.security.jwt.secret` | `JWT_SECRET` | *Configurable secret* | 256-bit secret key for HMAC-SHA256 signing |
+| `recoverai.security.jwt.expiration-ms` | `JWT_EXPIRATION_MS` | `86400000` (24 hours) | JWT access token validity duration in ms |
+| `recoverai.security.jwt.issuer` | `JWT_ISSUER` | `RecoverAI` | Issuer claim embedded in generated tokens |
+
+---
+
 ## Current Project Status
 
 - **Implemented Features**:
@@ -570,7 +735,9 @@ RecoverAI provides an automated and resilient Recovery Scheduling system (`Recov
   - `feature/recovery-orchestration`: Recovery Orchestration layer (`RecoveryOrchestratorService`, `RecoveryActionExecutor`, `DefaultRecoveryActionExecutor`, `RecoveryOrchestrationController`), lifecycle state machine, DB-backed attempt sequencing, duplicate protection, multi-tenant scoping, and audit logging.
   - `feature/recovery-communication`: Recovery Communication & Execution Layer (`WhatsAppRecoveryExecutor`, `EmailRecoveryExecutor`, `SmsRecoveryExecutor`, `SmartLinkRecoveryExecutor`, `RetryChargeRecoveryExecutor`, `ManualRecoveryExecutor`, `DefaultRecoveryLinkService`, safe mock providers, configuration properties).
   - `feature/recovery-outcome-webhooks`: Recovery Outcome Webhook & Attempt Reconciliation Layer (`POST /api/v1/webhooks/recovery-outcome`, `RecoveryOutcomeService`, `RecoveryAttemptStateMachine`, `RecoveryOutcomeSignatureVerifier`, Flyway V4 `recovery_outcome_events` idempotency tracking, trusted case reconciliation, multi-tenant isolation, structured audit trails).
-  - `feature/recovery-scheduling`: Automated Recovery Scheduling & Background Poller (`POST /api/v1/recovery-cases/{id}/schedule`, `RecoverySchedulerService`, `RecoverySchedulerWorker`, Flyway V5 index migration, atomic claim concurrency, terminal case guarding, 222 passing automated tests).
+  - `feature/recovery-scheduling`: Automated Recovery Scheduling & Background Poller (`POST /api/v1/recovery-cases/{id}/schedule`, `RecoverySchedulerService`, `RecoverySchedulerWorker`, Flyway V5 index migration, atomic claim concurrency, terminal case guarding).
+  - `feature/merchant-authentication`: Complete Merchant Authentication & JWT Security (`POST /api/v1/auth/register`, `POST /api/v1/auth/login`, Spring Security 6 stateless filter chain, JJWT 0.12.x provider, BCrypt password hashing, Flyway V6 `password_hash` migration, tenant identity propagation, tenant spoofing prevention, 254 passing automated tests).
+
 
 
 

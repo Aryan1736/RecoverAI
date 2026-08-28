@@ -70,5 +70,11 @@ recoverai:
       enabled: ${RECOVERY_SCHEDULER_ENABLED:true}
       polling-interval-ms: ${RECOVERY_SCHEDULER_POLLING_INTERVAL_MS:5000}
       batch-size: ${RECOVERY_SCHEDULER_BATCH_SIZE:50}
+  security:
+    jwt:
+      secret: ${JWT_SECRET:recoverai-secure-jwt-signing-secret-key-must-be-at-least-256-bits-long}
+      expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+      issuer: ${JWT_ISSUER:RecoverAI}
+
 
 

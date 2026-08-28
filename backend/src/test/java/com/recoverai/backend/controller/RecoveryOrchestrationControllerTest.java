@@ -19,6 +19,7 @@ import com.recoverai.backend.repository.MerchantRepository;
 import com.recoverai.backend.repository.PaymentRepository;
 import com.recoverai.backend.repository.RecoveryAttemptRepository;
 import com.recoverai.backend.repository.RecoveryCaseRepository;
+import com.recoverai.backend.security.JwtTokenProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -64,9 +65,13 @@ class RecoveryOrchestrationControllerTest {
     @Autowired
     private RecoveryAttemptRepository recoveryAttemptRepository;
 
+    @Autowired
+    private JwtTokenProvider jwtTokenProvider;
+
     private Merchant merchant;
     private RecoveryCase recoveryCase;
     private AgentDecision agentDecision;
+    private String token;
 
     @BeforeEach
     void setUp() {
@@ -75,6 +80,8 @@ class RecoveryOrchestrationControllerTest {
                 .email("merchant_" + UUID.randomUUID() + "@test.com")
                 .webhookSecret("secret-456")
                 .build());
+
+        token = jwtTokenProvider.generateToken(merchant);
 
         Customer customer = customerRepository.save(Customer.builder()
                 .merchant(merchant)
@@ -122,6 +129,7 @@ class RecoveryOrchestrationControllerTest {
     @DisplayName("POST /api/v1/recovery-cases/{id}/orchestrate with X-Merchant-Id header should return 200 OK")
     void shouldOrchestrateWithHeader() throws Exception {
         mockMvc.perform(post("/api/v1/recovery-cases/{id}/orchestrate", recoveryCase.getId())
+                        .header("Authorization", "Bearer " + token)
                         .header("X-Merchant-Id", merchant.getId().toString())
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
@@ -139,6 +147,7 @@ class RecoveryOrchestrationControllerTest {
     @DisplayName("POST /api/v1/merchants/{merchantId}/recovery-cases/{id}/orchestrate with path variable should return 200 OK")
     void shouldOrchestrateWithPath() throws Exception {
         mockMvc.perform(post("/api/v1/merchants/{merchantId}/recovery-cases/{id}/orchestrate", merchant.getId(), recoveryCase.getId())
+                        .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").isNotEmpty())
@@ -149,11 +158,11 @@ class RecoveryOrchestrationControllerTest {
     }
 
     @Test
-    @DisplayName("POST /api/v1/recovery-cases/{id}/orchestrate without header should return 400 Bad Request")
-    void shouldReturn400WhenHeaderMissing() throws Exception {
+    @DisplayName("POST /api/v1/recovery-cases/{id}/orchestrate without authentication should return 401 Unauthorized")
+    void shouldReturn401WhenUnauthenticated() throws Exception {
         mockMvc.perform(post("/api/v1/recovery-cases/{id}/orchestrate", recoveryCase.getId())
                         .contentType(MediaType.APPLICATION_JSON))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -161,6 +170,7 @@ class RecoveryOrchestrationControllerTest {
     void shouldReturn404WhenCaseNotFound() throws Exception {
         UUID nonExistentId = UUID.randomUUID();
         mockMvc.perform(post("/api/v1/recovery-cases/{id}/orchestrate", nonExistentId)
+                        .header("Authorization", "Bearer " + token)
                         .header("X-Merchant-Id", merchant.getId().toString())
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isNotFound())
@@ -171,7 +181,6 @@ class RecoveryOrchestrationControllerTest {
     @Test
     @DisplayName("POST /api/v1/recovery-cases/{id}/orchestrate should return 404 when no AgentDecision exists")
     void shouldReturn404WhenAgentDecisionMissing() throws Exception {
-        // Create another payment and case without AgentDecision
         Payment payment2 = paymentRepository.save(Payment.builder()
                 .merchant(merchant)
                 .customer(recoveryCase.getCustomer())
@@ -195,8 +204,8 @@ class RecoveryOrchestrationControllerTest {
                 .currency("INR")
                 .build());
 
-
         mockMvc.perform(post("/api/v1/recovery-cases/{id}/orchestrate", caseWithoutDecision.getId())
+                        .header("Authorization", "Bearer " + token)
                         .header("X-Merchant-Id", merchant.getId().toString())
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isNotFound())
@@ -211,6 +220,7 @@ class RecoveryOrchestrationControllerTest {
         recoveryCaseRepository.save(recoveryCase);
 
         mockMvc.perform(post("/api/v1/recovery-cases/{id}/orchestrate", recoveryCase.getId())
+                        .header("Authorization", "Bearer " + token)
                         .header("X-Merchant-Id", merchant.getId().toString())
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isBadRequest())
@@ -230,6 +240,7 @@ class RecoveryOrchestrationControllerTest {
                 .build());
 
         mockMvc.perform(post("/api/v1/recovery-cases/{id}/orchestrate", recoveryCase.getId())
+                        .header("Authorization", "Bearer " + token)
                         .header("X-Merchant-Id", merchant.getId().toString())
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isConflict())
@@ -243,6 +254,7 @@ class RecoveryOrchestrationControllerTest {
         String requestBody = "{\"scheduledAt\":\"2026-08-28T22:00:00Z\"}";
 
         mockMvc.perform(post("/api/v1/recovery-cases/{id}/schedule", recoveryCase.getId())
+                        .header("Authorization", "Bearer " + token)
                         .header("X-Merchant-Id", merchant.getId().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
@@ -261,6 +273,7 @@ class RecoveryOrchestrationControllerTest {
     @DisplayName("POST /api/v1/merchants/{merchantId}/recovery-cases/{id}/schedule with path should return 200 OK")
     void shouldScheduleWithPath() throws Exception {
         mockMvc.perform(post("/api/v1/merchants/{merchantId}/recovery-cases/{id}/schedule", merchant.getId(), recoveryCase.getId())
+                        .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isOk())
@@ -274,6 +287,7 @@ class RecoveryOrchestrationControllerTest {
         String requestBody = "{\"scheduledAt\":\"2020-01-01T00:00:00Z\"}";
 
         mockMvc.perform(post("/api/v1/recovery-cases/{id}/schedule", recoveryCase.getId())
+                        .header("Authorization", "Bearer " + token)
                         .header("X-Merchant-Id", merchant.getId().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))

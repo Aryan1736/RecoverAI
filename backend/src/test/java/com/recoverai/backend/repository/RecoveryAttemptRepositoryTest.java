@@ -161,4 +161,72 @@ class RecoveryAttemptRepositoryTest {
             recoveryAttemptRepository.saveAndFlush(a2);
         });
     }
+
+    @Test
+    @DisplayName("Should find due scheduled attempt IDs and ignore future scheduled attempts")
+    void testFindDueScheduledAttemptIds() {
+        RecoveryAttempt dueAttempt = RecoveryAttempt.builder()
+                .merchant(merchant)
+                .recoveryCase(recoveryCase)
+                .attemptNumber(1)
+                .channel(RecoveryChannel.WHATSAPP)
+                .status(RecoveryAttemptStatus.SCHEDULED)
+                .scheduledAt(Instant.now().minusSeconds(100))
+                .build();
+        recoveryAttemptRepository.saveAndFlush(dueAttempt);
+
+        Payment payment2 = paymentRepository.saveAndFlush(Payment.builder()
+                .merchant(merchant)
+                .customer(recoveryCase.getCustomer())
+                .razorpayPaymentId("pay_att_2_" + UUID.randomUUID())
+                .amount(new BigDecimal("2000.00"))
+                .status(PaymentStatus.FAILED)
+                .build());
+        RecoveryCase case2 = recoveryCaseRepository.saveAndFlush(RecoveryCase.builder()
+                .merchant(merchant)
+                .payment(payment2)
+                .customer(recoveryCase.getCustomer())
+                .status(RecoveryCaseStatus.OPEN)
+                .estimatedRecoverableAmount(new BigDecimal("2000.00"))
+                .build());
+
+        RecoveryAttempt futureAttempt = RecoveryAttempt.builder()
+                .merchant(merchant)
+                .recoveryCase(case2)
+                .attemptNumber(1)
+                .channel(RecoveryChannel.EMAIL)
+                .status(RecoveryAttemptStatus.SCHEDULED)
+                .scheduledAt(Instant.now().plusSeconds(3600))
+                .build();
+        recoveryAttemptRepository.saveAndFlush(futureAttempt);
+
+        List<UUID> dueIds = recoveryAttemptRepository.findDueScheduledAttemptIds(
+                RecoveryAttemptStatus.SCHEDULED, Instant.now(), org.springframework.data.domain.PageRequest.of(0, 10));
+
+        assertEquals(1, dueIds.size());
+        assertEquals(dueAttempt.getId(), dueIds.get(0));
+    }
+
+    @Test
+    @DisplayName("Should atomically claim attempt for execution")
+    void testClaimAttemptForExecution() {
+        RecoveryAttempt attempt = RecoveryAttempt.builder()
+                .merchant(merchant)
+                .recoveryCase(recoveryCase)
+                .attemptNumber(1)
+                .channel(RecoveryChannel.WHATSAPP)
+                .status(RecoveryAttemptStatus.SCHEDULED)
+                .scheduledAt(Instant.now().minusSeconds(50))
+                .build();
+        recoveryAttemptRepository.saveAndFlush(attempt);
+
+        int claimed = recoveryAttemptRepository.claimAttemptForExecution(
+                attempt.getId(), RecoveryAttemptStatus.SCHEDULED, RecoveryAttemptStatus.IN_FLIGHT, Instant.now());
+        assertEquals(1, claimed);
+
+        // Second claim attempt should return 0
+        int claimedAgain = recoveryAttemptRepository.claimAttemptForExecution(
+                attempt.getId(), RecoveryAttemptStatus.SCHEDULED, RecoveryAttemptStatus.IN_FLIGHT, Instant.now());
+        assertEquals(0, claimedAgain);
+    }
 }

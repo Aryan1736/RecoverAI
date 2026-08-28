@@ -236,4 +236,49 @@ class RecoveryOrchestrationControllerTest {
                 .andExpect(jsonPath("$.status").value(409))
                 .andExpect(jsonPath("$.message").value("An active recovery attempt is already scheduled or in-flight for case: " + recoveryCase.getId()));
     }
+
+    @Test
+    @DisplayName("POST /api/v1/recovery-cases/{id}/schedule with header should return 200 OK and SCHEDULED status")
+    void shouldScheduleWithHeader() throws Exception {
+        String requestBody = "{\"scheduledAt\":\"2026-08-28T22:00:00Z\"}";
+
+        mockMvc.perform(post("/api/v1/recovery-cases/{id}/schedule", recoveryCase.getId())
+                        .header("X-Merchant-Id", merchant.getId().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").isNotEmpty())
+                .andExpect(jsonPath("$.recoveryCaseId").value(recoveryCase.getId().toString()))
+                .andExpect(jsonPath("$.merchantId").value(merchant.getId().toString()))
+                .andExpect(jsonPath("$.attemptNumber").value(1))
+                .andExpect(jsonPath("$.channel").value("WHATSAPP"))
+                .andExpect(jsonPath("$.status").value("SCHEDULED"))
+                .andExpect(jsonPath("$.scheduledAt").value("2026-08-28T22:00:00Z"))
+                .andExpect(jsonPath("$.executedAt").isEmpty());
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/merchants/{merchantId}/recovery-cases/{id}/schedule with path should return 200 OK")
+    void shouldScheduleWithPath() throws Exception {
+        mockMvc.perform(post("/api/v1/merchants/{merchantId}/recovery-cases/{id}/schedule", merchant.getId(), recoveryCase.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").isNotEmpty())
+                .andExpect(jsonPath("$.status").value("SCHEDULED"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/recovery-cases/{id}/schedule with past timestamp should return 400 Bad Request")
+    void shouldReturn400WhenScheduledInPast() throws Exception {
+        String requestBody = "{\"scheduledAt\":\"2020-01-01T00:00:00Z\"}";
+
+        mockMvc.perform(post("/api/v1/recovery-cases/{id}/schedule", recoveryCase.getId())
+                        .header("X-Merchant-Id", merchant.getId().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").value("Scheduled time cannot be in the past: 2020-01-01T00:00:00Z"));
+    }
 }

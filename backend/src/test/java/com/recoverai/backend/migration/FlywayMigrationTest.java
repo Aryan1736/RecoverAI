@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class FlywayMigrationTest {
 
     @Test
-    @DisplayName("Flyway V1, V2, V3, and V4 migration scripts should execute successfully")
+    @DisplayName("Flyway V1, V2, V3, V4, and V5 migration scripts should execute successfully")
     void testFlywayMigrationExecution() {
         DataSource dataSource = DataSourceBuilder.create()
                 .url("jdbc:h2:mem:flyway_test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE")
@@ -30,7 +30,7 @@ class FlywayMigrationTest {
 
         assertDoesNotThrow(() -> {
             int migrationsApplied = flyway.migrate().migrationsExecuted;
-            assertEquals(4, migrationsApplied, "Expected 4 migrations (V1, V2, V3, V4) to be executed successfully");
+            assertEquals(5, migrationsApplied, "Expected 5 migrations (V1, V2, V3, V4, V5) to be executed successfully");
         });
     }
 }

@@ -168,6 +168,28 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
     }
 
+    @ExceptionHandler(RecoveryStrategyNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleRecoveryStrategyNotFoundException(RecoveryStrategyNotFoundException ex) {
+        log.warn("Recovery strategy not found: {}", ex.getMessage());
+        ApiErrorResponse response = new ApiErrorResponse(
+                HttpStatus.NOT_FOUND.value(),
+                "Not Found",
+                ex.getMessage()
+        );
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+    }
+
+    @ExceptionHandler(NoViableStrategyException.class)
+    public ResponseEntity<ApiErrorResponse> handleNoViableStrategyException(NoViableStrategyException ex) {
+        log.warn("No viable recovery strategy: {}", ex.getMessage());
+        ApiErrorResponse response = new ApiErrorResponse(
+                HttpStatus.UNPROCESSABLE_ENTITY.value(),
+                "Unprocessable Entity",
+                ex.getMessage()
+        );
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(response);
+    }
+
     @ExceptionHandler(AgentDecisionNotFoundException.class)
     public ResponseEntity<ApiErrorResponse> handleAgentDecisionNotFoundException(AgentDecisionNotFoundException ex) {
         log.warn("Agent decision not found: {}", ex.getMessage());

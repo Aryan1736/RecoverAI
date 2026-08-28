@@ -997,6 +997,145 @@ All analytics endpoints support optional date-range filtering:
 
 ---
 
+---
+
+## Recovery Strategy Engine
+
+The **Deterministic Recovery Strategy Engine** (`RecoveryStrategyEngine`, `RecoveryStrategyService`, `RecoveryStrategyController`) consumes the raw AI diagnosis (`AgentDecision`), payment failure telemetry, previous attempt history, customer contact availability, and configurable business policies to produce a deterministic, safe, and auditable **Recovery Strategy** before any attempt execution or scheduling.
+
+```
++---------------------+
+|   AI Diagnosis      |  Produces probabilistic AgentDecision
+| (Gemini 3.7 Flash)  |  (recommendedAction, channel, confidenceScore)
++----------+----------+
+           |
+           v
++---------------------+
+|  Recovery Strategy  |  Deterministic Policy Enforcement:
+|       Engine        |  - Terminal Case Protection (RECOVERED/CANCELLED/EXPIRED)
+|                     |  - High/Low Confidence Thresholding
++----------+----------+  - Failure Category Eligibility (insufficient_funds, network_error vs auth/invalid)
+           |             - Customer Contact Channel Viability (Phone/Email availability)
+           |             - Previous Attempt & Failure History / Fallback Cascading
+           |             - Configurable Max Attempts Limit Guard
+           v
++---------------------+
+|  RecoveryStrategy   |  Persisted in PostgreSQL (Flyway V9 `recovery_strategies`)
+|     (Persisted)     |  Immutable audit record with chosen channel, priority, delay, fallback
++----------+----------+
+           |
+           +----------------------------------+
+           |                                  |
+           v                                  v
++-----------------------+          +----------------------+
+| Recovery Orchestrator |          |  Recovery Scheduler  |
+|      Service          |          |       Service        |
++----------+------------+          +----------+-----------+
+           |                                  |
+           +-----------------+----------------+
+                             |
+                             v
+               +---------------------------+
+               |  RecoveryActionExecutors  |
+               | (WhatsApp, Email, SMS,    |
+               |  SmartLink, RetryCharge)  |
+               +---------------------------+
+```
+
+### Deterministic Strategy Policy Rules
+
+1. **Terminal Case Guarding**:
+   - If a recovery case is already `RECOVERED`, `CANCELLED`, or `EXPIRED`, or its underlying payment is `CAPTURED` or `REFUNDED`, the engine outputs a terminal strategy (`isTerminal = true`, action `NO_ACTION_TERMINAL`).
+   - Prevents any further scheduling or execution on completed cases.
+
+2. **Maximum Attempts Enforcement**:
+   - Compares total prior recovery attempts against `recoverai.recovery.strategy.max-attempts` (default: 3).
+   - If the limit is reached, a terminal strategy is generated (`isTerminal = true`, action `MAX_ATTEMPTS_EXCEEDED`), preventing duplicate or infinite attempt storms.
+
+3. **AI Confidence Thresholding**:
+   - Evaluates `AgentDecision.confidenceScore` against `recoverai.recovery.strategy.min-ai-confidence` (default: `0.70`).
+   - **Low Confidence (< 0.70)**: Automatically avoids automated payment re-charges (`RETRY_CHARGE`) and switches to conservative customer communication channels (`WHATSAPP` -> `EMAIL` -> `SMS` -> `SMART_LINK` -> `MANUAL`).
+
+4. **Payment Retry Charge Eligibility**:
+   - `RETRY_CHARGE` is only permitted when:
+     - `retry-charge-enabled` is `true`.
+     - AI confidence is sufficiently high (`>= 0.70`).
+     - Payment failure category is technically recoverable (e.g. `insufficient_funds`, `network_error`, `system_error`, `temporary_technical_issue`, `timeout`).
+     - Permanent/fatal failure categories (e.g. `authentication_failure`, `card_expired`, `invalid_request`, `bank_declined`, `fraud_suspected`) strictly prohibit automated re-charging.
+     - `RETRY_CHARGE` has not already been attempted previously for this case (capped at 1 retry charge attempt).
+
+5. **Customer Contact Availability & Viability**:
+   - `WHATSAPP` and `SMS`: Require a valid customer phone number (`customer.phone`).
+   - `EMAIL`: Requires a valid customer email address (`customer.email`).
+   - `SMART_LINK`: Requires either phone or email for link delivery.
+   - `MANUAL`: Fallback when no automated communication channels or contact information are present.
+
+6. **Channel Failure Cascading & Fallbacks**:
+   - Tracks failed attempts per channel. Channels exceeding `max-channel-failures` (default: 1) are marked exhausted.
+   - Fallback hierarchy: `WHATSAPP` -> `EMAIL` -> `SMS` -> `SMART_LINK` -> `MANUAL`.
+   - Strategies persist designated `fallbackChannel` and `fallbackAction` for downstream recovery resilience.
+
+---
+
+### Configuration Properties
+
+| Property | Environment Variable | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `recoverai.recovery.strategy.enabled` | `RECOVERY_STRATEGY_ENABLED` | `true` | Enable/disable deterministic strategy engine |
+| `recoverai.recovery.strategy.min-ai-confidence` | `RECOVERY_STRATEGY_MIN_AI_CONFIDENCE` | `0.70` | Minimum confidence score required for aggressive strategies |
+| `recoverai.recovery.strategy.max-attempts` | `RECOVERY_STRATEGY_MAX_ATTEMPTS` | `3` | Maximum allowed recovery attempts per case |
+| `recoverai.recovery.strategy.retry-charge-enabled` | `RECOVERY_STRATEGY_RETRY_CHARGE_ENABLED` | `true` | Allow automated payment re-charging when eligible |
+| `recoverai.recovery.strategy.fallback-enabled` | `RECOVERY_STRATEGY_FALLBACK_ENABLED` | `true` | Enable automatic channel fallback calculation |
+| `recoverai.recovery.strategy.max-channel-failures` | `RECOVERY_STRATEGY_MAX_CHANNEL_FAILURES` | `1` | Max failures on a single channel before switching |
+| `recoverai.recovery.strategy.default-delay-seconds` | `RECOVERY_STRATEGY_DEFAULT_DELAY_SECONDS` | `0` | Default execution delay for communication channels |
+| `recoverai.recovery.strategy.retry-delay-seconds` | `RECOVERY_STRATEGY_RETRY_DELAY_SECONDS` | `300` | Execution delay (seconds) for payment retry charges |
+
+---
+
+### Strategy API Endpoints
+
+#### 1. Generate Strategy
+- **URL**: `POST /api/v1/recovery-cases/{id}/strategy` (or `POST /api/v1/merchants/{merchantId}/recovery-cases/{id}/strategy`)
+- **Security**: JWT Bearer Token required
+- **Description**: Evaluates the recovery case and persists a new `RecoveryStrategy`.
+
+##### Sample Response (`200 OK`)
+```json
+{
+  "id": "e4b1b34a-939a-4c28-98e2-9d32bb58231a",
+  "recoveryCaseId": "2ba82602-6028-47f7-ade2-12a0ba189736",
+  "merchantId": "1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+  "channel": "RETRY_CHARGE",
+  "recommendedAction": "RETRY_CHARGE",
+  "priority": "HIGH",
+  "delaySeconds": 300,
+  "maxAttempts": 3,
+  "confidenceScore": 0.8800,
+  "reason": "AI recommended RETRY_CHARGE with high confidence (0.8800) and retry eligibility satisfied.",
+  "fallbackChannel": "WHATSAPP",
+  "fallbackAction": "SEND_WHATSAPP_REMINDER",
+  "terminal": false,
+  "createdAt": "2026-08-28T14:30:00Z"
+}
+```
+
+#### 2. Get Latest Strategy
+- **URL**: `GET /api/v1/recovery-cases/{id}/strategy` (or `GET /api/v1/merchants/{merchantId}/recovery-cases/{id}/strategy`)
+- **Security**: JWT Bearer Token required
+- **Description**: Retrieves the most recently computed and persisted recovery strategy for the specified recovery case.
+
+---
+
+### Audit Logging Events
+
+All strategy evaluations are recorded to the immutable `audit_events` log with `ActorType.SYSTEM` and `actorId = "RecoveryStrategyEngine"`:
+- `RECOVERY_STRATEGY_GENERATED`: Successfully created actionable strategy.
+- `RECOVERY_STRATEGY_FALLBACK`: Fallback channel selected due to contact/failure constraints.
+- `RECOVERY_STRATEGY_TERMINAL`: Terminal case or max attempts limit encountered.
+- `RECOVERY_STRATEGY_REJECTED`: Unviable strategy or execution prevented.
+
+---
+
 ## Current Project Status
 
 - **Implemented Features**:
@@ -1011,6 +1150,8 @@ All analytics endpoints support optional date-range filtering:
   - `feature/merchant-authentication`: Complete Merchant Authentication & JWT Security (`POST /api/v1/auth/register`, `POST /api/v1/auth/login`, Spring Security 6 stateless filter chain, JJWT 0.12.x provider, BCrypt password hashing, Flyway V6 `password_hash` migration, tenant identity propagation, tenant spoofing prevention).
   - `feature/merchant-dashboard-api`: Merchant Dashboard & Recovery Case Management API (`GET /api/v1/dashboard/summary`, `GET /api/v1/recovery-cases`, `GET /api/v1/recovery-cases/{id}`, `GET /api/v1/recovery-cases/{id}/attempts`, `PATCH /api/v1/recovery-cases/{id}/cancel`, Flyway V7 indexes, JPA dynamic specifications, multi-tenant scoping).
   - `feature/recovery-analytics`: Comprehensive Recovery Analytics & Reporting Engine (`GET /api/v1/analytics/overview`, `GET /api/v1/analytics/recovery-trends`, `GET /api/v1/analytics/failures`, `GET /api/v1/analytics/channels`, `GET /api/v1/analytics/attempts`, Flyway V8 analytics indexes, database aggregation projections, ISO date-range validation, and automated multi-tenant test suites).
+  - `feature/recovery-strategy-engine`: Deterministic Recovery Strategy Engine (`RecoveryStrategyEngine`, `RecoveryStrategyService`, `RecoveryStrategyController`, `RecoveryStrategyRepository`, Flyway V9 `recovery_strategies` migration, strongly-typed `RecoveryStrategyProperties`, deterministic policy evaluation, confidence thresholding, payment retry guard, channel viability & fallback cascading, max-attempt enforcement, tenant isolation, and audit trails).
+
 
 
 

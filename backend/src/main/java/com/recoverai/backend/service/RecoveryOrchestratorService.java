@@ -5,6 +5,7 @@ import com.recoverai.backend.entity.AgentDecision;
 import com.recoverai.backend.entity.Merchant;
 import com.recoverai.backend.entity.RecoveryAttempt;
 import com.recoverai.backend.entity.RecoveryCase;
+import com.recoverai.backend.entity.RecoveryStrategy;
 import com.recoverai.backend.entity.enums.ActorType;
 import com.recoverai.backend.entity.enums.RecoveryAttemptStatus;
 import com.recoverai.backend.entity.enums.RecoveryCaseStatus;
@@ -12,6 +13,7 @@ import com.recoverai.backend.entity.enums.RecoveryChannel;
 import com.recoverai.backend.exception.AgentDecisionNotFoundException;
 import com.recoverai.backend.exception.DuplicateOrchestrationException;
 import com.recoverai.backend.exception.InvalidRecoveryCaseStateException;
+import com.recoverai.backend.exception.NoViableStrategyException;
 import com.recoverai.backend.exception.RecoveryCaseNotFoundException;
 import com.recoverai.backend.repository.AgentDecisionRepository;
 import com.recoverai.backend.repository.RecoveryAttemptRepository;
@@ -19,6 +21,7 @@ import com.recoverai.backend.repository.RecoveryCaseRepository;
 import com.recoverai.backend.service.executor.DefaultRecoveryActionExecutor;
 import com.recoverai.backend.service.executor.ExecutionResult;
 import com.recoverai.backend.service.executor.RecoveryActionExecutor;
+import com.recoverai.backend.service.strategy.RecoveryStrategyService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -49,9 +52,27 @@ public class RecoveryOrchestratorService {
     private final RecoveryCaseRepository recoveryCaseRepository;
     private final AgentDecisionRepository agentDecisionRepository;
     private final RecoveryAttemptRepository recoveryAttemptRepository;
+    private final RecoveryStrategyService recoveryStrategyService;
     private final List<RecoveryActionExecutor> actionExecutors;
     private final DefaultRecoveryActionExecutor defaultActionExecutor;
     private final AuditService auditService;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public RecoveryOrchestratorService(RecoveryCaseRepository recoveryCaseRepository,
+                                       AgentDecisionRepository agentDecisionRepository,
+                                       RecoveryAttemptRepository recoveryAttemptRepository,
+                                       RecoveryStrategyService recoveryStrategyService,
+                                       List<RecoveryActionExecutor> actionExecutors,
+                                       DefaultRecoveryActionExecutor defaultActionExecutor,
+                                       AuditService auditService) {
+        this.recoveryCaseRepository = recoveryCaseRepository;
+        this.agentDecisionRepository = agentDecisionRepository;
+        this.recoveryAttemptRepository = recoveryAttemptRepository;
+        this.recoveryStrategyService = recoveryStrategyService;
+        this.actionExecutors = actionExecutors;
+        this.defaultActionExecutor = defaultActionExecutor;
+        this.auditService = auditService;
+    }
 
     public RecoveryOrchestratorService(RecoveryCaseRepository recoveryCaseRepository,
                                        AgentDecisionRepository agentDecisionRepository,
@@ -59,12 +80,7 @@ public class RecoveryOrchestratorService {
                                        List<RecoveryActionExecutor> actionExecutors,
                                        DefaultRecoveryActionExecutor defaultActionExecutor,
                                        AuditService auditService) {
-        this.recoveryCaseRepository = recoveryCaseRepository;
-        this.agentDecisionRepository = agentDecisionRepository;
-        this.recoveryAttemptRepository = recoveryAttemptRepository;
-        this.actionExecutors = actionExecutors;
-        this.defaultActionExecutor = defaultActionExecutor;
-        this.auditService = auditService;
+        this(recoveryCaseRepository, agentDecisionRepository, recoveryAttemptRepository, null, actionExecutors, defaultActionExecutor, auditService);
     }
 
     @Transactional
@@ -107,19 +123,36 @@ public class RecoveryOrchestratorService {
                     "AgentDecision merchant mismatch for recovery case: " + recoveryCaseId);
         }
 
+        // 5. Strategy Engine evaluation
         RecoveryChannel channel = agentDecision.getChannel() != null ? agentDecision.getChannel() : RecoveryChannel.MANUAL;
+        String recommendedAction = agentDecision.getRecommendedAction();
+        String strategyIdStr = "DIRECT";
 
-        // 5. Safe attempt numbering via DB-backed sequence
+        if (recoveryStrategyService != null) {
+            RecoveryStrategy strategy = recoveryStrategyService.computeAndPersistStrategy(recoveryCase);
+            if (strategy.isTerminal()) {
+                if (TERMINAL_CASE_STATUSES.contains(recoveryCase.getStatus())) {
+                    throw new InvalidRecoveryCaseStateException(
+                            "Cannot orchestrate recovery for case in terminal status: " + recoveryCase.getStatus());
+                }
+                throw new NoViableStrategyException("Cannot orchestrate recovery: " + strategy.getReason());
+            }
+            channel = strategy.getChannel() != null ? strategy.getChannel() : RecoveryChannel.MANUAL;
+            recommendedAction = strategy.getRecommendedAction();
+            strategyIdStr = strategy.getId() != null ? strategy.getId().toString() : "UNKNOWN";
+        }
+
+        // 6. Safe attempt numbering via DB-backed sequence
         int nextAttemptNumber = calculateNextAttemptNumber(recoveryCaseId);
 
-        // 6. Update RecoveryCase from OPEN -> IN_PROGRESS
+        // 7. Update RecoveryCase from OPEN -> IN_PROGRESS
         if (recoveryCase.getStatus() == RecoveryCaseStatus.OPEN) {
             recoveryCase.setStatus(RecoveryCaseStatus.IN_PROGRESS);
             recoveryCaseRepository.save(recoveryCase);
             log.info("Transitioned recoveryCaseId={} status to IN_PROGRESS", recoveryCaseId);
         }
 
-        // 7. Create and persist initial RecoveryAttempt
+        // 8. Create and persist initial RecoveryAttempt
         Instant now = Instant.now();
         RecoveryAttempt attempt = RecoveryAttempt.builder()
                 .recoveryCase(recoveryCase)
@@ -128,8 +161,8 @@ public class RecoveryOrchestratorService {
                 .channel(channel)
                 .status(RecoveryAttemptStatus.SCHEDULED)
                 .scheduledAt(now)
-                .metadata(String.format("{\"agentDecisionId\":\"%s\",\"recommendedAction\":\"%s\"}",
-                        agentDecision.getId(), agentDecision.getRecommendedAction()))
+                .metadata(String.format("{\"agentDecisionId\":\"%s\",\"strategyId\":\"%s\",\"recommendedAction\":\"%s\"}",
+                        agentDecision.getId(), strategyIdStr, recommendedAction))
                 .build();
 
         RecoveryAttempt savedAttempt = recoveryAttemptRepository.save(attempt);
@@ -150,7 +183,7 @@ public class RecoveryOrchestratorService {
                 null
         );
 
-        // 8. Execute via Action Executor abstraction
+        // 9. Execute via Action Executor abstraction
         executeAttempt(savedAttempt, recoveryCase, merchant);
 
         return RecoveryAttemptResponseDto.fromEntity(savedAttempt);

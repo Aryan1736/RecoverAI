@@ -33,6 +33,8 @@ public interface RecoveryCaseRepository extends JpaRepository<RecoveryCase, UUID
 
     Optional<RecoveryCase> findByIdAndMerchantId(UUID id, UUID merchantId);
 
+    boolean existsByIdAndMerchantId(UUID id, UUID merchantId);
+
     List<RecoveryCase> findByMerchantIdAndCustomerId(UUID merchantId, UUID customerId);
 
     long countByMerchantIdAndStatus(UUID merchantId, RecoveryCaseStatus status);

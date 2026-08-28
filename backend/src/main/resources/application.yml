@@ -70,6 +70,15 @@ recoverai:
       enabled: ${RECOVERY_SCHEDULER_ENABLED:true}
       polling-interval-ms: ${RECOVERY_SCHEDULER_POLLING_INTERVAL_MS:5000}
       batch-size: ${RECOVERY_SCHEDULER_BATCH_SIZE:50}
+    strategy:
+      enabled: ${RECOVERY_STRATEGY_ENABLED:true}
+      min-ai-confidence: ${RECOVERY_STRATEGY_MIN_AI_CONFIDENCE:0.70}
+      max-attempts: ${RECOVERY_STRATEGY_MAX_ATTEMPTS:3}
+      retry-charge-enabled: ${RECOVERY_STRATEGY_RETRY_CHARGE_ENABLED:true}
+      fallback-enabled: ${RECOVERY_STRATEGY_FALLBACK_ENABLED:true}
+      max-channel-failures: ${RECOVERY_STRATEGY_MAX_CHANNEL_FAILURES:1}
+      default-delay-seconds: ${RECOVERY_STRATEGY_DEFAULT_DELAY_SECONDS:0}
+      retry-delay-seconds: ${RECOVERY_STRATEGY_RETRY_DELAY_SECONDS:300}
   security:
     jwt:
       secret: ${JWT_SECRET:recoverai-secure-jwt-signing-secret-key-must-be-at-least-256-bits-long}

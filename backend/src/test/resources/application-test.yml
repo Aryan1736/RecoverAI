@@ -61,6 +61,15 @@ recoverai:
       enabled: false
       polling-interval-ms: 5000
       batch-size: 50
+    strategy:
+      enabled: true
+      min-ai-confidence: 0.70
+      max-attempts: 3
+      retry-charge-enabled: true
+      fallback-enabled: true
+      max-channel-failures: 1
+      default-delay-seconds: 0
+      retry-delay-seconds: 300
   security:
     jwt:
       secret: recoverai-test-jwt-signing-secret-key-must-be-at-least-256-bits-long

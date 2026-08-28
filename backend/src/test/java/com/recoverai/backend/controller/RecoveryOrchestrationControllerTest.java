@@ -87,6 +87,7 @@ class RecoveryOrchestrationControllerTest {
                 .merchant(merchant)
                 .name("Bob Test")
                 .email("bob_" + UUID.randomUUID() + "@example.com")
+                .phone("+919876543210")
                 .build());
 
         Payment payment = paymentRepository.save(Payment.builder()

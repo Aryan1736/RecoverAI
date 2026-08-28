@@ -6,6 +6,7 @@ import com.recoverai.backend.entity.AgentDecision;
 import com.recoverai.backend.entity.Merchant;
 import com.recoverai.backend.entity.RecoveryAttempt;
 import com.recoverai.backend.entity.RecoveryCase;
+import com.recoverai.backend.entity.RecoveryStrategy;
 import com.recoverai.backend.entity.enums.ActorType;
 import com.recoverai.backend.entity.enums.RecoveryAttemptStatus;
 import com.recoverai.backend.entity.enums.RecoveryCaseStatus;
@@ -14,6 +15,7 @@ import com.recoverai.backend.exception.AgentDecisionNotFoundException;
 import com.recoverai.backend.exception.DuplicateOrchestrationException;
 import com.recoverai.backend.exception.InvalidRecoveryCaseStateException;
 import com.recoverai.backend.exception.InvalidScheduledTimeException;
+import com.recoverai.backend.exception.NoViableStrategyException;
 import com.recoverai.backend.exception.RecoveryCaseNotFoundException;
 import com.recoverai.backend.repository.AgentDecisionRepository;
 import com.recoverai.backend.repository.RecoveryAttemptRepository;
@@ -21,6 +23,7 @@ import com.recoverai.backend.repository.RecoveryCaseRepository;
 import com.recoverai.backend.service.executor.DefaultRecoveryActionExecutor;
 import com.recoverai.backend.service.executor.ExecutionResult;
 import com.recoverai.backend.service.executor.RecoveryActionExecutor;
+import com.recoverai.backend.service.strategy.RecoveryStrategyService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
@@ -53,6 +56,7 @@ public class RecoverySchedulerService {
     private final RecoveryCaseRepository recoveryCaseRepository;
     private final AgentDecisionRepository agentDecisionRepository;
     private final RecoveryAttemptRepository recoveryAttemptRepository;
+    private final RecoveryStrategyService recoveryStrategyService;
     private final List<RecoveryActionExecutor> actionExecutors;
     private final DefaultRecoveryActionExecutor defaultActionExecutor;
     private final AuditService auditService;
@@ -62,9 +66,11 @@ public class RecoverySchedulerService {
     @org.springframework.context.annotation.Lazy
     private RecoverySchedulerService self;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public RecoverySchedulerService(RecoveryCaseRepository recoveryCaseRepository,
                                   AgentDecisionRepository agentDecisionRepository,
                                   RecoveryAttemptRepository recoveryAttemptRepository,
+                                  RecoveryStrategyService recoveryStrategyService,
                                   List<RecoveryActionExecutor> actionExecutors,
                                   DefaultRecoveryActionExecutor defaultActionExecutor,
                                   AuditService auditService,
@@ -72,10 +78,21 @@ public class RecoverySchedulerService {
         this.recoveryCaseRepository = recoveryCaseRepository;
         this.agentDecisionRepository = agentDecisionRepository;
         this.recoveryAttemptRepository = recoveryAttemptRepository;
+        this.recoveryStrategyService = recoveryStrategyService;
         this.actionExecutors = actionExecutors;
         this.defaultActionExecutor = defaultActionExecutor;
         this.auditService = auditService;
         this.properties = properties;
+    }
+
+    public RecoverySchedulerService(RecoveryCaseRepository recoveryCaseRepository,
+                                  AgentDecisionRepository agentDecisionRepository,
+                                  RecoveryAttemptRepository recoveryAttemptRepository,
+                                  List<RecoveryActionExecutor> actionExecutors,
+                                  DefaultRecoveryActionExecutor defaultActionExecutor,
+                                  AuditService auditService,
+                                  RecoverySchedulerProperties properties) {
+        this(recoveryCaseRepository, agentDecisionRepository, recoveryAttemptRepository, null, actionExecutors, defaultActionExecutor, auditService, properties);
     }
 
     @Transactional
@@ -126,19 +143,40 @@ public class RecoverySchedulerService {
                     "AgentDecision merchant mismatch for recovery case: " + recoveryCaseId);
         }
 
+        // 6. Strategy Engine evaluation
         RecoveryChannel channel = agentDecision.getChannel() != null ? agentDecision.getChannel() : RecoveryChannel.MANUAL;
+        String recommendedAction = agentDecision.getRecommendedAction();
+        String strategyIdStr = "DIRECT";
 
-        // 6. Safe attempt numbering via DB-backed sequence
+        if (recoveryStrategyService != null) {
+            RecoveryStrategy strategy = recoveryStrategyService.computeAndPersistStrategy(recoveryCase);
+            if (strategy.isTerminal()) {
+                if (TERMINAL_CASE_STATUSES.contains(recoveryCase.getStatus())) {
+                    throw new InvalidRecoveryCaseStateException(
+                            "Cannot schedule recovery for case in terminal status: " + recoveryCase.getStatus());
+                }
+                throw new NoViableStrategyException("Cannot schedule recovery: " + strategy.getReason());
+            }
+            channel = strategy.getChannel() != null ? strategy.getChannel() : RecoveryChannel.MANUAL;
+            recommendedAction = strategy.getRecommendedAction();
+            strategyIdStr = strategy.getId() != null ? strategy.getId().toString() : "UNKNOWN";
+
+            if (scheduledAt == null && strategy.getDelaySeconds() > 0) {
+                effectiveScheduledAt = now.plusSeconds(strategy.getDelaySeconds());
+            }
+        }
+
+        // 7. Safe attempt numbering via DB-backed sequence
         int nextAttemptNumber = calculateNextAttemptNumber(recoveryCaseId);
 
-        // 7. Update RecoveryCase from OPEN -> IN_PROGRESS
+        // 8. Update RecoveryCase from OPEN -> IN_PROGRESS
         if (recoveryCase.getStatus() == RecoveryCaseStatus.OPEN) {
             recoveryCase.setStatus(RecoveryCaseStatus.IN_PROGRESS);
             recoveryCaseRepository.save(recoveryCase);
             log.info("Transitioned recoveryCaseId={} status to IN_PROGRESS", recoveryCaseId);
         }
 
-        // 8. Create and persist SCHEDULED RecoveryAttempt
+        // 9. Create and persist SCHEDULED RecoveryAttempt
         RecoveryAttempt attempt = RecoveryAttempt.builder()
                 .recoveryCase(recoveryCase)
                 .merchant(merchant)
@@ -146,8 +184,8 @@ public class RecoverySchedulerService {
                 .channel(channel)
                 .status(RecoveryAttemptStatus.SCHEDULED)
                 .scheduledAt(effectiveScheduledAt)
-                .metadata(String.format("{\"agentDecisionId\":\"%s\",\"recommendedAction\":\"%s\"}",
-                        agentDecision.getId(), agentDecision.getRecommendedAction()))
+                .metadata(String.format("{\"agentDecisionId\":\"%s\",\"strategyId\":\"%s\",\"recommendedAction\":\"%s\"}",
+                        agentDecision.getId(), strategyIdStr, recommendedAction))
                 .build();
 
         RecoveryAttempt savedAttempt = recoveryAttemptRepository.save(attempt);

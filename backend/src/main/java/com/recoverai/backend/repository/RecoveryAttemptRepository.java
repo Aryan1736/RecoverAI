@@ -23,6 +23,10 @@ public interface RecoveryAttemptRepository extends JpaRepository<RecoveryAttempt
     List<RecoveryAttempt> findByRecoveryCaseId(UUID recoveryCaseId);
 
     List<RecoveryAttempt> findByRecoveryCaseIdOrderByAttemptNumberAsc(UUID recoveryCaseId);
+    
+    List<RecoveryAttempt> findByRecoveryCaseIdAndMerchantIdOrderByAttemptNumberAsc(UUID recoveryCaseId, UUID merchantId);
+
+    List<RecoveryAttempt> findByRecoveryCaseIdAndStatus(UUID recoveryCaseId, RecoveryAttemptStatus status);
 
     List<RecoveryAttempt> findByMerchantId(UUID merchantId);
 

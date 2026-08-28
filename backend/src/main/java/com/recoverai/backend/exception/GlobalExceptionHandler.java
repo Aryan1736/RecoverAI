@@ -58,6 +58,17 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
     }
 
+    @ExceptionHandler(RecoveryAttemptNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleRecoveryAttemptNotFoundException(RecoveryAttemptNotFoundException ex) {
+        log.warn("Recovery attempt not found: {}", ex.getMessage());
+        ApiErrorResponse response = new ApiErrorResponse(
+                HttpStatus.NOT_FOUND.value(),
+                "Not Found",
+                ex.getMessage()
+        );
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+    }
+
     @ExceptionHandler(DiagnosisValidationException.class)
     public ResponseEntity<ApiErrorResponse> handleDiagnosisValidationException(DiagnosisValidationException ex) {
         log.warn("Diagnosis validation failure: {}", ex.getMessage());
@@ -72,6 +83,17 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(InvalidRecoveryCaseStateException.class)
     public ResponseEntity<ApiErrorResponse> handleInvalidRecoveryCaseStateException(InvalidRecoveryCaseStateException ex) {
         log.warn("Invalid recovery case state: {}", ex.getMessage());
+        ApiErrorResponse response = new ApiErrorResponse(
+                HttpStatus.BAD_REQUEST.value(),
+                "Bad Request",
+                ex.getMessage()
+        );
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    }
+
+    @ExceptionHandler(InvalidRecoveryAttemptStateException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidRecoveryAttemptStateException(InvalidRecoveryAttemptStateException ex) {
+        log.warn("Invalid recovery attempt state: {}", ex.getMessage());
         ApiErrorResponse response = new ApiErrorResponse(
                 HttpStatus.BAD_REQUEST.value(),
                 "Bad Request",

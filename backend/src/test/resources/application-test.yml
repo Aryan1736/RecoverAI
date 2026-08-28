@@ -55,4 +55,6 @@ recoverai:
     retry-charge:
       provider: mock
       auto-retry-enabled: true
+    webhook:
+      signature-header: X-Recovery-Signature
 

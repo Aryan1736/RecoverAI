@@ -102,6 +102,17 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
     }
 
+    @ExceptionHandler(InvalidScheduledTimeException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidScheduledTimeException(InvalidScheduledTimeException ex) {
+        log.warn("Invalid scheduled time: {}", ex.getMessage());
+        ApiErrorResponse response = new ApiErrorResponse(
+                HttpStatus.BAD_REQUEST.value(),
+                "Bad Request",
+                ex.getMessage()
+        );
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    }
+
     @ExceptionHandler(AgentDecisionNotFoundException.class)
     public ResponseEntity<ApiErrorResponse> handleAgentDecisionNotFoundException(AgentDecisionNotFoundException ex) {
         log.warn("Agent decision not found: {}", ex.getMessage());

@@ -66,4 +66,9 @@ recoverai:
       auto-retry-enabled: ${RETRY_CHARGE_ENABLED:true}
     webhook:
       signature-header: ${RECOVERY_OUTCOME_WEBHOOK_SIGNATURE_HEADER:X-Recovery-Signature}
+    scheduler:
+      enabled: ${RECOVERY_SCHEDULER_ENABLED:true}
+      polling-interval-ms: ${RECOVERY_SCHEDULER_POLLING_INTERVAL_MS:5000}
+      batch-size: ${RECOVERY_SCHEDULER_BATCH_SIZE:50}
+
 

@@ -460,6 +460,106 @@ Structured audit logging via `AuditService` (`ActorType.WEBHOOK`):
 
 ---
 
+---
+
+## Recovery Scheduling & Automated Background Poller
+
+RecoverAI provides an automated and resilient Recovery Scheduling system (`RecoverySchedulerService`, `RecoverySchedulerWorker`) that allows recovery attempts to be planned for future execution or queued for immediate background processing.
+
+### Architecture & Polling Lifecycle
+```
+┌────────────────────────────────────────────────────────┐
+│  POST /api/v1/recovery-cases/{id}/schedule             │
+│  Payload: { "scheduledAt": "2026-08-28T19:30:00Z" }    │
+└─────────────────────────┬──────────────────────────────┘
+                          │
+                          ▼
+┌────────────────────────────────────────────────────────┐
+│  RecoverySchedulerService.scheduleRecovery             │
+│  - Multi-tenant ownership check                        │
+│  - Guard against terminal cases (RECOVERED, etc.)      │
+│  - Idempotency check for active attempts               │
+│  - Sequential attempt numbering                        │
+│  - Case state: OPEN ➔ IN_PROGRESS                      │
+│  - Persist RecoveryAttempt in SCHEDULED status         │
+└────────────────────────────────────────────────────────┘
+                          │
+                          ▼
+┌────────────────────────────────────────────────────────┐
+│  Periodic Background Worker (@Scheduled)               │
+│  RecoverySchedulerWorker (Fixed delay: 5000ms)         │
+└─────────────────────────┬──────────────────────────────┘
+                          │
+                          ▼
+┌────────────────────────────────────────────────────────┐
+│  RecoverySchedulerService.pollAndExecuteDueAttempts    │
+│  - Queries DB for due SCHEDULED attempts (idx_status_  │
+│    scheduled_at composite index)                       │
+│  - Atomic claim: SCHEDULED ➔ IN_FLIGHT                 │
+│  - Prevents race conditions across clustered nodes     │
+│  - Terminal case guard (skips if case already solved)  │
+│  - Dispatches to RecoveryActionExecutor                │
+│  - Reconciles case to RECOVERED on immediate success   │
+│  - Emits immutable AuditEvents                         │
+└────────────────────────────────────────────────────────┘
+```
+
+### Endpoints Specification
+- **URL**: `POST /api/v1/recovery-cases/{recoveryCaseId}/schedule`
+  - **Header**: `X-Merchant-Id: <uuid>`
+- **Alternative URL**: `POST /api/v1/merchants/{merchantId}/recovery-cases/{recoveryCaseId}/schedule`
+
+#### Request Payload
+```json
+{
+  "scheduledAt": "2026-08-28T19:30:00Z"
+}
+```
+*Note: `scheduledAt` is optional. If omitted or null, it defaults to the current timestamp (`Instant.now()`).*
+
+#### Response Payload (201 Created)
+```json
+{
+  "id": "uuid",
+  "recoveryCaseId": "uuid",
+  "merchantId": "uuid",
+  "attemptNumber": 1,
+  "channel": "WHATSAPP",
+  "status": "SCHEDULED",
+  "scheduledAt": "2026-08-28T19:30:00Z",
+  "executedAt": null,
+  "completedAt": null,
+  "resultCode": null,
+  "resultMessage": null,
+  "recoveryLink": null,
+  "metadata": "{\"agentDecisionId\":\"...\",\"recommendedAction\":\"WHATSAPP_SMART_LINK\"}",
+  "createdAt": "2026-08-28T18:00:00Z",
+  "updatedAt": "2026-08-28T18:00:00Z"
+}
+```
+
+### Concurrency, Idempotency & Clustering Strategy
+1. **Composite Index Polling**: Flyway migration `V5__create_recovery_scheduler_index.sql` adds a composite index on `recovery_attempts(status, scheduled_at)` to ensure high-performance polling under heavy volumes.
+2. **Atomic DB-Level Claiming**: Claiming is executed via an atomic update query:
+   ```sql
+   UPDATE recovery_attempts
+   SET status = 'IN_FLIGHT', executed_at = :now, updated_at = :now
+   WHERE id = :id AND status = 'SCHEDULED'
+   ```
+   In a clustered multi-node deployment, only the single worker that receives `rowsUpdated == 1` proceeds with execution. All competing workers receive `0` and safely yield, guaranteeing zero duplicate dispatches.
+3. **Isolated Subtransactions**: Execution for each attempt is isolated in a separate transaction (`Propagation.REQUIRES_NEW`), ensuring an unexpected failure during one attempt's execution never aborts the overall polling batch or other attempts.
+4. **Terminal Case Guarding**: If a recovery case transitions to a terminal state (`RECOVERED`, `CANCELLED`, `EXPIRED`) while waiting in `SCHEDULED` status, the claiming service detects this prior to execution, marks the attempt `SKIPPED` with result code `CASE_TERMINAL`, and prevents unnecessary customer communication or payment retries.
+5. **Multi-Tenant Security**: Strict merchant ownership is verified during scheduling (`findByIdAndMerchantId`). Attempt entities inherit the merchant identifier and all audit events are scoped to the merchant.
+
+### Configuration Properties
+| Property | Environment Variable | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `recoverai.recovery.scheduler.enabled` | `RECOVERY_SCHEDULER_ENABLED` | `true` | Enables or disables background polling worker |
+| `recoverai.recovery.scheduler.polling-interval-ms` | `RECOVERY_SCHEDULER_POLLING_INTERVAL_MS` | `5000` | Polling cycle delay in milliseconds |
+| `recoverai.recovery.scheduler.batch-size` | `RECOVERY_SCHEDULER_BATCH_SIZE` | `50` | Maximum number of due attempts claimed per cycle |
+
+---
+
 ## Current Project Status
 
 - **Implemented Features**:
@@ -469,7 +569,8 @@ Structured audit logging via `AuditService` (`ActorType.WEBHOOK`):
   - `feature/ai-failure-diagnosis-engine`: Google Gemini AI failure diagnosis engine (`AIDiagnosisService`, `GeminiClient`, `AIDiagnosisController`), structured JSON recommendations, confidence score validation, tenant isolation, PII masking, `AgentDecision` persistence.
   - `feature/recovery-orchestration`: Recovery Orchestration layer (`RecoveryOrchestratorService`, `RecoveryActionExecutor`, `DefaultRecoveryActionExecutor`, `RecoveryOrchestrationController`), lifecycle state machine, DB-backed attempt sequencing, duplicate protection, multi-tenant scoping, and audit logging.
   - `feature/recovery-communication`: Recovery Communication & Execution Layer (`WhatsAppRecoveryExecutor`, `EmailRecoveryExecutor`, `SmsRecoveryExecutor`, `SmartLinkRecoveryExecutor`, `RetryChargeRecoveryExecutor`, `ManualRecoveryExecutor`, `DefaultRecoveryLinkService`, safe mock providers, configuration properties).
-  - `feature/recovery-outcome-webhooks`: Recovery Outcome Webhook & Attempt Reconciliation Layer (`POST /api/v1/webhooks/recovery-outcome`, `RecoveryOutcomeService`, `RecoveryAttemptStateMachine`, `RecoveryOutcomeSignatureVerifier`, Flyway V4 `recovery_outcome_events` idempotency tracking, trusted case reconciliation, multi-tenant isolation, structured audit trails, and 197 passing automated tests).
+  - `feature/recovery-outcome-webhooks`: Recovery Outcome Webhook & Attempt Reconciliation Layer (`POST /api/v1/webhooks/recovery-outcome`, `RecoveryOutcomeService`, `RecoveryAttemptStateMachine`, `RecoveryOutcomeSignatureVerifier`, Flyway V4 `recovery_outcome_events` idempotency tracking, trusted case reconciliation, multi-tenant isolation, structured audit trails).
+  - `feature/recovery-scheduling`: Automated Recovery Scheduling & Background Poller (`POST /api/v1/recovery-cases/{id}/schedule`, `RecoverySchedulerService`, `RecoverySchedulerWorker`, Flyway V5 index migration, atomic claim concurrency, terminal case guarding, 222 passing automated tests).
 
 
 

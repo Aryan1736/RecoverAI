@@ -57,4 +57,9 @@ recoverai:
       auto-retry-enabled: true
     webhook:
       signature-header: X-Recovery-Signature
+    scheduler:
+      enabled: false
+      polling-interval-ms: 5000
+      batch-size: 50
+
 

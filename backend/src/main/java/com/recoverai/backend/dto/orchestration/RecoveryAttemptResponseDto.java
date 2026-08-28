@@ -1,9 +1,12 @@
 package com.recoverai.backend.dto.orchestration;
 
+import com.recoverai.backend.dto.strategy.RecoveryStrategySnapshot;
 import com.recoverai.backend.entity.RecoveryAttempt;
 import com.recoverai.backend.entity.enums.RecoveryAttemptStatus;
 import com.recoverai.backend.entity.enums.RecoveryChannel;
+import com.recoverai.backend.entity.enums.RecoveryPriority;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -21,6 +24,11 @@ public class RecoveryAttemptResponseDto {
     private String resultCode;
     private String resultMessage;
     private String recoveryLink;
+    private UUID strategyId;
+    private RecoveryStrategySnapshot strategySnapshot;
+    private RecoveryPriority strategyPriority;
+    private BigDecimal confidenceScore;
+    private String recommendedAction;
     private Instant createdAt;
     private Instant updatedAt;
 
@@ -32,6 +40,19 @@ public class RecoveryAttemptResponseDto {
                                      Instant scheduledAt, Instant executedAt, Instant completedAt,
                                      String resultCode, String resultMessage, String recoveryLink,
                                      Instant createdAt, Instant updatedAt) {
+        this(id, recoveryCaseId, merchantId, attemptNumber, channel, status,
+                scheduledAt, executedAt, completedAt, resultCode, resultMessage, recoveryLink,
+                null, null, null, null, null, createdAt, updatedAt);
+    }
+
+    public RecoveryAttemptResponseDto(UUID id, UUID recoveryCaseId, UUID merchantId, int attemptNumber,
+                                      RecoveryChannel channel, RecoveryAttemptStatus status,
+                                      Instant scheduledAt, Instant executedAt, Instant completedAt,
+                                      String resultCode, String resultMessage, String recoveryLink,
+                                      UUID strategyId, RecoveryStrategySnapshot strategySnapshot,
+                                      RecoveryPriority strategyPriority, BigDecimal confidenceScore,
+                                      String recommendedAction,
+                                      Instant createdAt, Instant updatedAt) {
         this.id = id;
         this.recoveryCaseId = recoveryCaseId;
         this.merchantId = merchantId;
@@ -44,6 +65,11 @@ public class RecoveryAttemptResponseDto {
         this.resultCode = resultCode;
         this.resultMessage = resultMessage;
         this.recoveryLink = recoveryLink;
+        this.strategyId = strategyId;
+        this.strategySnapshot = strategySnapshot;
+        this.strategyPriority = strategyPriority;
+        this.confidenceScore = confidenceScore;
+        this.recommendedAction = recommendedAction;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
@@ -52,6 +78,27 @@ public class RecoveryAttemptResponseDto {
         if (entity == null) {
             return null;
         }
+
+        UUID strategyId = entity.getStrategy() != null ? entity.getStrategy().getId() : null;
+        RecoveryStrategySnapshot snapshot = RecoveryStrategySnapshot.fromJson(entity.getStrategySnapshot());
+        if (strategyId == null && snapshot != null) {
+            strategyId = snapshot.getStrategyId();
+        }
+
+        RecoveryPriority priority = null;
+        BigDecimal confidence = null;
+        String action = null;
+
+        if (snapshot != null) {
+            priority = snapshot.getPriority();
+            confidence = snapshot.getConfidenceScore();
+            action = snapshot.getRecommendedAction();
+        } else if (entity.getStrategy() != null) {
+            priority = entity.getStrategy().getPriority();
+            confidence = entity.getStrategy().getConfidenceScore();
+            action = entity.getStrategy().getRecommendedAction();
+        }
+
         return new RecoveryAttemptResponseDto(
                 entity.getId(),
                 entity.getRecoveryCase() != null ? entity.getRecoveryCase().getId() : null,
@@ -65,6 +112,11 @@ public class RecoveryAttemptResponseDto {
                 entity.getResultCode(),
                 entity.getResultMessage(),
                 entity.getRecoveryLink(),
+                strategyId,
+                snapshot,
+                priority,
+                confidence,
+                action,
                 entity.getCreatedAt(),
                 entity.getUpdatedAt()
         );
@@ -164,6 +216,46 @@ public class RecoveryAttemptResponseDto {
 
     public void setRecoveryLink(String recoveryLink) {
         this.recoveryLink = recoveryLink;
+    }
+
+    public UUID getStrategyId() {
+        return strategyId;
+    }
+
+    public void setStrategyId(UUID strategyId) {
+        this.strategyId = strategyId;
+    }
+
+    public RecoveryStrategySnapshot getStrategySnapshot() {
+        return strategySnapshot;
+    }
+
+    public void setStrategySnapshot(RecoveryStrategySnapshot strategySnapshot) {
+        this.strategySnapshot = strategySnapshot;
+    }
+
+    public RecoveryPriority getStrategyPriority() {
+        return strategyPriority;
+    }
+
+    public void setStrategyPriority(RecoveryPriority strategyPriority) {
+        this.strategyPriority = strategyPriority;
+    }
+
+    public BigDecimal getConfidenceScore() {
+        return confidenceScore;
+    }
+
+    public void setConfidenceScore(BigDecimal confidenceScore) {
+        this.confidenceScore = confidenceScore;
+    }
+
+    public String getRecommendedAction() {
+        return recommendedAction;
+    }
+
+    public void setRecommendedAction(String recommendedAction) {
+        this.recommendedAction = recommendedAction;
     }
 
     public Instant getCreatedAt() {

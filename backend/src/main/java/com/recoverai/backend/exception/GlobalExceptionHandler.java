@@ -190,6 +190,17 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(response);
     }
 
+    @ExceptionHandler(StrategyExecutionDisabledException.class)
+    public ResponseEntity<ApiErrorResponse> handleStrategyExecutionDisabledException(StrategyExecutionDisabledException ex) {
+        log.warn("Strategy execution disabled: {}", ex.getMessage());
+        ApiErrorResponse response = new ApiErrorResponse(
+                HttpStatus.UNPROCESSABLE_ENTITY.value(),
+                "Unprocessable Entity",
+                ex.getMessage()
+        );
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(response);
+    }
+
     @ExceptionHandler(AgentDecisionNotFoundException.class)
     public ResponseEntity<ApiErrorResponse> handleAgentDecisionNotFoundException(AgentDecisionNotFoundException ex) {
         log.warn("Agent decision not found: {}", ex.getMessage());

@@ -56,4 +56,58 @@ public interface RecoveryAttemptRepository extends JpaRepository<RecoveryAttempt
                                  @Param("now") Instant now);
 
     long countByStatusAndScheduledAtLessThanEqual(RecoveryAttemptStatus status, Instant now);
+    
+    @Query("SELECT " +
+            "ra.channel AS channel, " +
+            "COUNT(ra) AS totalAttempts, " +
+            "SUM(CASE WHEN ra.status = com.recoverai.backend.entity.enums.RecoveryAttemptStatus.SUCCESS THEN 1L ELSE 0L END) AS successfulAttempts, " +
+            "SUM(CASE WHEN ra.status = com.recoverai.backend.entity.enums.RecoveryAttemptStatus.FAILED THEN 1L ELSE 0L END) AS failedAttempts, " +
+            "SUM(CASE WHEN ra.status = com.recoverai.backend.entity.enums.RecoveryAttemptStatus.SENT THEN 1L ELSE 0L END) AS sentAttempts, " +
+            "SUM(CASE WHEN ra.status = com.recoverai.backend.entity.enums.RecoveryAttemptStatus.DELIVERED THEN 1L ELSE 0L END) AS deliveredAttempts, " +
+            "SUM(CASE WHEN ra.status = com.recoverai.backend.entity.enums.RecoveryAttemptStatus.CLICKED THEN 1L ELSE 0L END) AS clickedAttempts, " +
+            "COALESCE(SUM(CASE WHEN ra.status = com.recoverai.backend.entity.enums.RecoveryAttemptStatus.SUCCESS THEN ra.recoveryCase.recoveredAmount ELSE 0.0 END), 0.0) AS recoveredAmount " +
+            "FROM RecoveryAttempt ra " +
+            "WHERE ra.merchant.id = :merchantId AND ra.createdAt >= :from AND ra.createdAt <= :to " +
+            "GROUP BY ra.channel " +
+            "ORDER BY COUNT(ra) DESC, ra.channel ASC")
+    List<com.recoverai.backend.repository.projection.ChannelPerformanceProjection> getChannelPerformanceAnalytics(
+            @Param("merchantId") UUID merchantId,
+            @Param("from") Instant from,
+            @Param("to") Instant to);
+
+    @Query("SELECT " +
+            "COUNT(ra) AS totalAttempts, " +
+            "SUM(CASE WHEN ra.status = com.recoverai.backend.entity.enums.RecoveryAttemptStatus.SUCCESS THEN 1L ELSE 0L END) AS successfulAttempts, " +
+            "SUM(CASE WHEN ra.status = com.recoverai.backend.entity.enums.RecoveryAttemptStatus.FAILED THEN 1L ELSE 0L END) AS failedAttempts, " +
+            "SUM(CASE WHEN ra.status = com.recoverai.backend.entity.enums.RecoveryAttemptStatus.SCHEDULED THEN 1L ELSE 0L END) AS scheduledAttempts, " +
+            "SUM(CASE WHEN ra.status = com.recoverai.backend.entity.enums.RecoveryAttemptStatus.IN_FLIGHT THEN 1L ELSE 0L END) AS inFlightAttempts, " +
+            "SUM(CASE WHEN ra.status = com.recoverai.backend.entity.enums.RecoveryAttemptStatus.SENT THEN 1L ELSE 0L END) AS sentAttempts, " +
+            "SUM(CASE WHEN ra.status = com.recoverai.backend.entity.enums.RecoveryAttemptStatus.DELIVERED THEN 1L ELSE 0L END) AS deliveredAttempts, " +
+            "SUM(CASE WHEN ra.status = com.recoverai.backend.entity.enums.RecoveryAttemptStatus.CLICKED THEN 1L ELSE 0L END) AS clickedAttempts, " +
+            "SUM(CASE WHEN ra.status = com.recoverai.backend.entity.enums.RecoveryAttemptStatus.SKIPPED THEN 1L ELSE 0L END) AS skippedAttempts, " +
+            "COUNT(DISTINCT ra.recoveryCase.id) AS distinctCasesWithAttempts " +
+            "FROM RecoveryAttempt ra " +
+            "WHERE ra.merchant.id = :merchantId AND ra.createdAt >= :from AND ra.createdAt <= :to")
+    com.recoverai.backend.repository.projection.AttemptSummaryProjection getAttemptSummaryAnalytics(
+            @Param("merchantId") UUID merchantId,
+            @Param("from") Instant from,
+            @Param("to") Instant to);
+
+    @Query("SELECT ra.status AS status, COUNT(ra) AS count " +
+            "FROM RecoveryAttempt ra " +
+            "WHERE ra.merchant.id = :merchantId AND ra.createdAt >= :from AND ra.createdAt <= :to " +
+            "GROUP BY ra.status")
+    List<com.recoverai.backend.repository.projection.StatusCountProjection> countAttemptsByStatus(
+            @Param("merchantId") UUID merchantId,
+            @Param("from") Instant from,
+            @Param("to") Instant to);
+
+    @Query("SELECT ra.channel AS channel, COUNT(ra) AS count " +
+            "FROM RecoveryAttempt ra " +
+            "WHERE ra.merchant.id = :merchantId AND ra.createdAt >= :from AND ra.createdAt <= :to " +
+            "GROUP BY ra.channel")
+    List<com.recoverai.backend.repository.projection.ChannelCountProjection> countAttemptsByChannel(
+            @Param("merchantId") UUID merchantId,
+            @Param("from") Instant from,
+            @Param("to") Instant to);
 }

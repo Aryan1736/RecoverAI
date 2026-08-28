@@ -725,6 +725,278 @@ Authorization: Bearer <jwt-token>
 
 ---
 
+---
+
+## Merchant Dashboard & Recovery Management APIs
+
+RecoverAI provides merchant-scoped recovery case management and dashboard metrics.
+
+### Endpoints Specification
+
+| Endpoint Path | Method | Access Level | Description |
+| :--- | :--- | :--- | :--- |
+| `/api/v1/dashboard/summary` | `GET` | Authenticated | High-level merchant summary metrics |
+| `/api/v1/recovery-cases` | `GET` | Authenticated | Paginated and filtered list of merchant recovery cases |
+| `/api/v1/recovery-cases/{id}` | `GET` | Authenticated | Detailed recovery case information with attempts and AI diagnosis |
+| `/api/v1/recovery-cases/{id}/attempts` | `GET` | Authenticated | Ordered history of recovery attempts for a case |
+| `/api/v1/recovery-cases/{id}/cancel` | `PATCH` | Authenticated | Cancel an open or in-progress recovery case and skip scheduled attempts |
+
+---
+
+## Recovery Analytics & Reporting Engine
+
+RecoverAI features a production-ready, merchant-scoped recovery analytics and reporting engine providing deep insights into recovery metrics, daily performance trends, payment failure reasons, communication channel efficacy, and recovery attempt breakdowns.
+
+### Analytics Endpoints
+
+| Endpoint Path | Method | Access Level | Description |
+| :--- | :--- | :--- | :--- |
+| `/api/v1/analytics/overview` | `GET` | Authenticated | Comprehensive recovery KPIs and average recovery time |
+| `/api/v1/analytics/recovery-trends` | `GET` | Authenticated | Daily periodic trends of cases, at-risk volume, recovered amounts, and recovery rate |
+| `/api/v1/analytics/failures` | `GET` | Authenticated | Revenue risk & recovery analytics grouped by failure category and priority |
+| `/api/v1/analytics/channels` | `GET` | Authenticated | Conversion, delivery, and success metrics grouped by recovery channel |
+| `/api/v1/analytics/attempts` | `GET` | Authenticated | Status breakdown, channel distribution, and average attempts per recovery case |
+
+### Common Request Parameters
+
+All analytics endpoints support optional date-range filtering:
+
+| Parameter | Type | In | Description | Default |
+| :--- | :--- | :--- | :--- | :--- |
+| `from` | `String` | Query | Start date/time (ISO-8601 format: `YYYY-MM-DD` or `YYYY-MM-DDTHH:mm:ssZ`) | 30 days prior to `to` |
+| `to` | `String` | Query | End date/time (ISO-8601 format: `YYYY-MM-DD` or `YYYY-MM-DDTHH:mm:ssZ`) | Current timestamp (`now`) |
+| `Authorization` | `String` | Header | Bearer JWT access token (`Bearer <jwt>`) | **Required** |
+| `X-Merchant-Id` | `UUID` | Header | Optional explicit merchant ID (validated against JWT token) | Authenticated Merchant ID |
+
+### Date Range Validation Rules
+1. **Sensible Defaults**: If both `from` and `to` are omitted, a 30-day window (`[now - 30 days, now]`) is applied automatically.
+2. **Flexible Formats**: Accepts both ISO-8601 date strings (`2026-08-01`) and full UTC timestamps (`2026-08-01T00:00:00Z`).
+3. **Range Constraints**:
+   - `from` must be before or equal to `to`. If `from > to`, returns **HTTP 400 Bad Request**.
+   - Maximum date span cannot exceed **365 days** to prevent expensive unbounded queries.
+   - Invalid formats return **HTTP 400 Bad Request** with a descriptive `ApiErrorResponse`.
+
+---
+
+### Endpoint Details & Response Structures
+
+#### 1. Recovery Analytics Overview
+- **URL**: `GET /api/v1/analytics/overview`
+- **Description**: Returns top-level KPIs including case distributions, monetary totals, recovery rate, average recovered amount, and average time to recovery.
+
+##### Sample Response (`200 OK`)
+```json
+{
+  "totalCases": 50,
+  "openCases": 10,
+  "inProgressCases": 15,
+  "recoveredCases": 20,
+  "failedCases": 2,
+  "expiredCases": 2,
+  "cancelledCases": 1,
+  "expiredOrCancelledCases": 3,
+  "totalEstimatedRecoverableAmount": 150000.00,
+  "totalRecoveredAmount": 65000.00,
+  "recoveryRate": 40.00,
+  "averageRecoveredAmount": 3250.00,
+  "averageTimeToRecoverySeconds": 4320.00,
+  "from": "2026-07-29T14:00:00Z",
+  "to": "2026-08-28T14:00:00Z"
+}
+```
+
+---
+
+#### 2. Recovery Trend Analytics
+- **URL**: `GET /api/v1/analytics/recovery-trends`
+- **Description**: Returns daily recovery volume, at-risk capital, recovered amounts, and daily recovery rate aggregated at the database level with deterministic ascending date ordering.
+
+##### Sample Response (`200 OK`)
+```json
+{
+  "from": "2026-08-01T00:00:00Z",
+  "to": "2026-08-28T23:59:59.999Z",
+  "totalCases": 25,
+  "totalAmountAtRisk": 75000.00,
+  "totalRecoveredAmount": 35000.00,
+  "overallRecoveryRate": 46.67,
+  "trends": [
+    {
+      "date": "2026-08-01",
+      "recoveryCasesCreated": 5,
+      "amountAtRisk": 15000.00,
+      "amountRecovered": 7500.00,
+      "recoveredCaseCount": 3,
+      "recoveryRate": 60.00
+    },
+    {
+      "date": "2026-08-02",
+      "recoveryCasesCreated": 8,
+      "amountAtRisk": 24000.00,
+      "amountRecovered": 12000.00,
+      "recoveredCaseCount": 4,
+      "recoveryRate": 50.00
+    }
+  ]
+}
+```
+
+---
+
+#### 3. Failure Analytics
+- **URL**: `GET /api/v1/analytics/failures`
+- **Description**: Groups payment failures by `failureReasonCategory` and `priority` to help merchants identify which root causes represent the highest revenue risk.
+
+##### Sample Response (`200 OK`)
+```json
+{
+  "from": "2026-07-29T14:00:00Z",
+  "to": "2026-08-28T14:00:00Z",
+  "totalCases": 40,
+  "categories": [
+    {
+      "failureReasonCategory": "INSUFFICIENT_FUNDS",
+      "caseCount": 20,
+      "estimatedRecoverableAmount": 60000.00,
+      "recoveredAmount": 30000.00,
+      "recoveredCaseCount": 10,
+      "recoveryRate": 50.00
+    },
+    {
+      "failureReasonCategory": "AUTHENTICATION_ERROR",
+      "caseCount": 15,
+      "estimatedRecoverableAmount": 45000.00,
+      "recoveredAmount": 22500.00,
+      "recoveredCaseCount": 8,
+      "recoveryRate": 53.33
+    }
+  ],
+  "priorities": [
+    {
+      "priority": "CRITICAL",
+      "caseCount": 10,
+      "estimatedRecoverableAmount": 50000.00,
+      "recoveredAmount": 35000.00,
+      "recoveredCaseCount": 7,
+      "recoveryRate": 70.00
+    },
+    {
+      "priority": "HIGH",
+      "caseCount": 20,
+      "estimatedRecoverableAmount": 40000.00,
+      "recoveredAmount": 15000.00,
+      "recoveredCaseCount": 8,
+      "recoveryRate": 40.00
+    }
+  ]
+}
+```
+
+---
+
+#### 4. Channel Performance Analytics
+- **URL**: `GET /api/v1/analytics/channels`
+- **Description**: Analyzes recovery attempts per communication channel (`WHATSAPP`, `EMAIL`, `SMS`, `RETRY_CHARGE`, `SMART_LINK`, `MANUAL`) measuring total dispatches, deliveries, clicks, success rate, and attributable recovered revenue.
+
+##### Sample Response (`200 OK`)
+```json
+{
+  "from": "2026-07-29T14:00:00Z",
+  "to": "2026-08-28T14:00:00Z",
+  "totalAttempts": 80,
+  "channels": [
+    {
+      "channel": "WHATSAPP",
+      "totalAttempts": 45,
+      "successfulAttempts": 25,
+      "failedAttempts": 5,
+      "sentAttempts": 10,
+      "deliveredAttempts": 5,
+      "clickedAttempts": 0,
+      "successRate": 55.56,
+      "recoveredAmount": 52000.00
+    },
+    {
+      "channel": "EMAIL",
+      "totalAttempts": 25,
+      "successfulAttempts": 8,
+      "failedAttempts": 7,
+      "sentAttempts": 8,
+      "deliveredAttempts": 2,
+      "clickedAttempts": 0,
+      "successRate": 32.00,
+      "recoveredAmount": 18000.00
+    },
+    {
+      "channel": "RETRY_CHARGE",
+      "totalAttempts": 10,
+      "successfulAttempts": 6,
+      "failedAttempts": 4,
+      "sentAttempts": 0,
+      "deliveredAttempts": 0,
+      "clickedAttempts": 0,
+      "successRate": 60.00,
+      "recoveredAmount": 12000.00
+    }
+  ]
+}
+```
+
+---
+
+#### 5. Recovery Attempt Analytics
+- **URL**: `GET /api/v1/analytics/attempts`
+- **Description**: Comprehensive breakdown of recovery attempts by lifecycle status and channel, including calculation of average attempts per recovery case.
+
+##### Sample Response (`200 OK`)
+```json
+{
+  "from": "2026-07-29T14:00:00Z",
+  "to": "2026-08-28T14:00:00Z",
+  "totalAttempts": 80,
+  "successfulAttempts": 39,
+  "failedAttempts": 16,
+  "scheduledAttempts": 10,
+  "inFlightAttempts": 3,
+  "sentAttempts": 8,
+  "deliveredAttempts": 4,
+  "clickedAttempts": 0,
+  "skippedAttempts": 0,
+  "successRate": 48.75,
+  "averageAttemptsPerRecoveryCase": 1.60,
+  "attemptsByStatus": {
+    "SCHEDULED": 10,
+    "IN_FLIGHT": 3,
+    "SENT": 8,
+    "DELIVERED": 4,
+    "CLICKED": 0,
+    "SUCCESS": 39,
+    "FAILED": 16,
+    "SKIPPED": 0
+  },
+  "attemptsByChannel": {
+    "WHATSAPP": 45,
+    "EMAIL": 25,
+    "SMS": 0,
+    "RETRY_CHARGE": 10,
+    "SMART_LINK": 0,
+    "MANUAL": 0
+  }
+}
+```
+
+---
+
+### Security & Multi-Tenant Isolation Guarantees
+
+1. **JWT Authentication Required**: All analytics endpoints require a valid JWT bearer token. Unauthenticated requests are rejected with **HTTP 401 Unauthorized**.
+2. **Tenant Scoping from Security Context**: Merchant identity is always resolved authoritatively from `SecurityUtils.getCurrentMerchantId()`.
+3. **Anti-Spoofing Protection**: Any mismatch between the authenticated merchant and supplied headers/parameters immediately yields **HTTP 403 Forbidden**.
+4. **Database-Level Isolation**: Every SQL/JPQL aggregation strictly enforces `WHERE rc.merchant.id = :merchantId` or `WHERE ra.merchant.id = :merchantId`.
+5. **High-Performance Aggregations**: All analytics metrics are computed via database-level `SUM`, `COUNT`, `AVG`, and `GROUP BY` projections without loading entire entity graphs into memory. Composite indexes (Flyway V7 & V8) accelerate multi-tenant analytics filtering.
+
+---
+
 ## Current Project Status
 
 - **Implemented Features**:
@@ -736,7 +1008,10 @@ Authorization: Bearer <jwt-token>
   - `feature/recovery-communication`: Recovery Communication & Execution Layer (`WhatsAppRecoveryExecutor`, `EmailRecoveryExecutor`, `SmsRecoveryExecutor`, `SmartLinkRecoveryExecutor`, `RetryChargeRecoveryExecutor`, `ManualRecoveryExecutor`, `DefaultRecoveryLinkService`, safe mock providers, configuration properties).
   - `feature/recovery-outcome-webhooks`: Recovery Outcome Webhook & Attempt Reconciliation Layer (`POST /api/v1/webhooks/recovery-outcome`, `RecoveryOutcomeService`, `RecoveryAttemptStateMachine`, `RecoveryOutcomeSignatureVerifier`, Flyway V4 `recovery_outcome_events` idempotency tracking, trusted case reconciliation, multi-tenant isolation, structured audit trails).
   - `feature/recovery-scheduling`: Automated Recovery Scheduling & Background Poller (`POST /api/v1/recovery-cases/{id}/schedule`, `RecoverySchedulerService`, `RecoverySchedulerWorker`, Flyway V5 index migration, atomic claim concurrency, terminal case guarding).
-  - `feature/merchant-authentication`: Complete Merchant Authentication & JWT Security (`POST /api/v1/auth/register`, `POST /api/v1/auth/login`, Spring Security 6 stateless filter chain, JJWT 0.12.x provider, BCrypt password hashing, Flyway V6 `password_hash` migration, tenant identity propagation, tenant spoofing prevention, 254 passing automated tests).
+  - `feature/merchant-authentication`: Complete Merchant Authentication & JWT Security (`POST /api/v1/auth/register`, `POST /api/v1/auth/login`, Spring Security 6 stateless filter chain, JJWT 0.12.x provider, BCrypt password hashing, Flyway V6 `password_hash` migration, tenant identity propagation, tenant spoofing prevention).
+  - `feature/merchant-dashboard-api`: Merchant Dashboard & Recovery Case Management API (`GET /api/v1/dashboard/summary`, `GET /api/v1/recovery-cases`, `GET /api/v1/recovery-cases/{id}`, `GET /api/v1/recovery-cases/{id}/attempts`, `PATCH /api/v1/recovery-cases/{id}/cancel`, Flyway V7 indexes, JPA dynamic specifications, multi-tenant scoping).
+  - `feature/recovery-analytics`: Comprehensive Recovery Analytics & Reporting Engine (`GET /api/v1/analytics/overview`, `GET /api/v1/analytics/recovery-trends`, `GET /api/v1/analytics/failures`, `GET /api/v1/analytics/channels`, `GET /api/v1/analytics/attempts`, Flyway V8 analytics indexes, database aggregation projections, ISO date-range validation, and automated multi-tenant test suites).
+
 
 
 

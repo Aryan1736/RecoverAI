@@ -19,6 +19,7 @@ import com.recoverai.backend.repository.CustomerRepository;
 import com.recoverai.backend.repository.MerchantRepository;
 import com.recoverai.backend.repository.PaymentRepository;
 import com.recoverai.backend.repository.RecoveryCaseRepository;
+import com.recoverai.backend.security.JwtTokenProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -61,11 +62,15 @@ class AIDiagnosisControllerTest {
     @Autowired
     private RecoveryCaseRepository recoveryCaseRepository;
 
+    @Autowired
+    private JwtTokenProvider jwtTokenProvider;
+
     @MockBean
     private GeminiClient geminiClient;
 
     private Merchant merchant;
     private RecoveryCase recoveryCase;
+    private String token;
 
     @BeforeEach
     void setUp() {
@@ -74,6 +79,8 @@ class AIDiagnosisControllerTest {
                 .email("merchant_" + UUID.randomUUID() + "@test.com")
                 .webhookSecret("secret-123")
                 .build());
+
+        token = jwtTokenProvider.generateToken(merchant);
 
         Customer customer = customerRepository.save(Customer.builder()
                 .merchant(merchant)
@@ -125,6 +132,7 @@ class AIDiagnosisControllerTest {
         when(geminiClient.diagnose(any(DiagnosisContext.class))).thenReturn(diagnosisResponse);
 
         mockMvc.perform(post("/api/v1/recovery-cases/{id}/diagnose", recoveryCase.getId())
+                        .header("Authorization", "Bearer " + token)
                         .header("X-Merchant-Id", merchant.getId().toString())
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
@@ -155,6 +163,7 @@ class AIDiagnosisControllerTest {
         when(geminiClient.diagnose(any(DiagnosisContext.class))).thenReturn(diagnosisResponse);
 
         mockMvc.perform(post("/api/v1/merchants/{merchantId}/recovery-cases/{id}/diagnose", merchant.getId(), recoveryCase.getId())
+                        .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").isNotEmpty())
@@ -163,11 +172,11 @@ class AIDiagnosisControllerTest {
     }
 
     @Test
-    @DisplayName("POST /api/v1/recovery-cases/{id}/diagnose without header should return 400 Bad Request")
-    void shouldReturn400WhenHeaderMissing() throws Exception {
+    @DisplayName("POST /api/v1/recovery-cases/{id}/diagnose without authentication should return 401 Unauthorized")
+    void shouldReturn401WhenUnauthenticated() throws Exception {
         mockMvc.perform(post("/api/v1/recovery-cases/{id}/diagnose", recoveryCase.getId())
                         .contentType(MediaType.APPLICATION_JSON))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -176,6 +185,7 @@ class AIDiagnosisControllerTest {
         UUID nonExistentCaseId = UUID.randomUUID();
 
         mockMvc.perform(post("/api/v1/recovery-cases/{id}/diagnose", nonExistentCaseId)
+                        .header("Authorization", "Bearer " + token)
                         .header("X-Merchant-Id", merchant.getId().toString())
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isNotFound())
@@ -190,6 +200,7 @@ class AIDiagnosisControllerTest {
                 .thenThrow(new DiagnosisValidationException("Confidence score out of bounds"));
 
         mockMvc.perform(post("/api/v1/recovery-cases/{id}/diagnose", recoveryCase.getId())
+                        .header("Authorization", "Bearer " + token)
                         .header("X-Merchant-Id", merchant.getId().toString())
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isBadRequest())
@@ -204,6 +215,7 @@ class AIDiagnosisControllerTest {
                 .thenThrow(new GeminiApiException("Gemini API returned HTTP status 503", 503));
 
         mockMvc.perform(post("/api/v1/recovery-cases/{id}/diagnose", recoveryCase.getId())
+                        .header("Authorization", "Bearer " + token)
                         .header("X-Merchant-Id", merchant.getId().toString())
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isBadGateway())

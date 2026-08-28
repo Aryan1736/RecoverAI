@@ -43,6 +43,9 @@ public class Merchant {
     @Column(name = "webhook_secret")
     private String webhookSecret;
 
+    @Column(name = "password_hash")
+    private String passwordHash;
+
     @NotNull(message = "Merchant status is required")
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 50)
@@ -59,11 +62,17 @@ public class Merchant {
 
     public Merchant(UUID id, String name, String email, String razorpayAccountId, String webhookSecret,
                     MerchantStatus status, Instant createdAt, Instant updatedAt) {
+        this(id, name, email, razorpayAccountId, webhookSecret, null, status, createdAt, updatedAt);
+    }
+
+    public Merchant(UUID id, String name, String email, String razorpayAccountId, String webhookSecret,
+                    String passwordHash, MerchantStatus status, Instant createdAt, Instant updatedAt) {
         this.id = id;
         this.name = name;
         this.email = email;
         this.razorpayAccountId = razorpayAccountId;
         this.webhookSecret = webhookSecret;
+        this.passwordHash = passwordHash;
         this.status = status != null ? status : MerchantStatus.ACTIVE;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
@@ -132,6 +141,14 @@ public class Merchant {
         this.webhookSecret = webhookSecret;
     }
 
+    public String getPasswordHash() {
+        return passwordHash;
+    }
+
+    public void setPasswordHash(String passwordHash) {
+        this.passwordHash = passwordHash;
+    }
+
     public MerchantStatus getStatus() {
         return status;
     }
@@ -175,6 +192,7 @@ public class Merchant {
         private String email;
         private String razorpayAccountId;
         private String webhookSecret;
+        private String passwordHash;
         private MerchantStatus status = MerchantStatus.ACTIVE;
         private Instant createdAt;
         private Instant updatedAt;
@@ -185,7 +203,7 @@ public class Merchant {
         public MerchantBuilder id(UUID id) {
             this.id = id;
             return this;
-        }
+            }
 
         public MerchantBuilder name(String name) {
             this.name = name;
@@ -207,6 +225,11 @@ public class Merchant {
             return this;
         }
 
+        public MerchantBuilder passwordHash(String passwordHash) {
+            this.passwordHash = passwordHash;
+            return this;
+        }
+
         public MerchantBuilder status(MerchantStatus status) {
             this.status = status;
             return this;
@@ -223,7 +246,7 @@ public class Merchant {
         }
 
         public Merchant build() {
-            return new Merchant(id, name, email, razorpayAccountId, webhookSecret, status, createdAt, updatedAt);
+            return new Merchant(id, name, email, razorpayAccountId, webhookSecret, passwordHash, status, createdAt, updatedAt);
         }
     }
 }

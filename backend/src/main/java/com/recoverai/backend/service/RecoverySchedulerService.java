@@ -1,8 +1,11 @@
 package com.recoverai.backend.service;
 
 import com.recoverai.backend.config.RecoverySchedulerProperties;
+import com.recoverai.backend.config.RecoveryStrategyProperties;
 import com.recoverai.backend.dto.orchestration.RecoveryAttemptResponseDto;
+import com.recoverai.backend.dto.strategy.RecoveryStrategySnapshot;
 import com.recoverai.backend.entity.AgentDecision;
+import com.recoverai.backend.entity.Customer;
 import com.recoverai.backend.entity.Merchant;
 import com.recoverai.backend.entity.RecoveryAttempt;
 import com.recoverai.backend.entity.RecoveryCase;
@@ -17,15 +20,18 @@ import com.recoverai.backend.exception.InvalidRecoveryCaseStateException;
 import com.recoverai.backend.exception.InvalidScheduledTimeException;
 import com.recoverai.backend.exception.NoViableStrategyException;
 import com.recoverai.backend.exception.RecoveryCaseNotFoundException;
+import com.recoverai.backend.exception.StrategyExecutionDisabledException;
 import com.recoverai.backend.repository.AgentDecisionRepository;
 import com.recoverai.backend.repository.RecoveryAttemptRepository;
 import com.recoverai.backend.repository.RecoveryCaseRepository;
+import com.recoverai.backend.repository.RecoveryStrategyRepository;
 import com.recoverai.backend.service.executor.DefaultRecoveryActionExecutor;
 import com.recoverai.backend.service.executor.ExecutionResult;
 import com.recoverai.backend.service.executor.RecoveryActionExecutor;
 import com.recoverai.backend.service.strategy.RecoveryStrategyService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -56,29 +62,35 @@ public class RecoverySchedulerService {
     private final RecoveryCaseRepository recoveryCaseRepository;
     private final AgentDecisionRepository agentDecisionRepository;
     private final RecoveryAttemptRepository recoveryAttemptRepository;
+    private final RecoveryStrategyRepository recoveryStrategyRepository;
     private final RecoveryStrategyService recoveryStrategyService;
+    private final RecoveryStrategyProperties recoveryStrategyProperties;
     private final List<RecoveryActionExecutor> actionExecutors;
     private final DefaultRecoveryActionExecutor defaultActionExecutor;
     private final AuditService auditService;
     private final RecoverySchedulerProperties properties;
 
-    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    @Autowired(required = false)
     @org.springframework.context.annotation.Lazy
     private RecoverySchedulerService self;
 
-    @org.springframework.beans.factory.annotation.Autowired
+    @Autowired
     public RecoverySchedulerService(RecoveryCaseRepository recoveryCaseRepository,
-                                  AgentDecisionRepository agentDecisionRepository,
-                                  RecoveryAttemptRepository recoveryAttemptRepository,
-                                  RecoveryStrategyService recoveryStrategyService,
-                                  List<RecoveryActionExecutor> actionExecutors,
-                                  DefaultRecoveryActionExecutor defaultActionExecutor,
-                                  AuditService auditService,
-                                  RecoverySchedulerProperties properties) {
+                                    AgentDecisionRepository agentDecisionRepository,
+                                    RecoveryAttemptRepository recoveryAttemptRepository,
+                                    @Autowired(required = false) RecoveryStrategyRepository recoveryStrategyRepository,
+                                    @Autowired(required = false) RecoveryStrategyService recoveryStrategyService,
+                                    @Autowired(required = false) RecoveryStrategyProperties recoveryStrategyProperties,
+                                    List<RecoveryActionExecutor> actionExecutors,
+                                    DefaultRecoveryActionExecutor defaultActionExecutor,
+                                    AuditService auditService,
+                                    RecoverySchedulerProperties properties) {
         this.recoveryCaseRepository = recoveryCaseRepository;
         this.agentDecisionRepository = agentDecisionRepository;
         this.recoveryAttemptRepository = recoveryAttemptRepository;
+        this.recoveryStrategyRepository = recoveryStrategyRepository;
         this.recoveryStrategyService = recoveryStrategyService;
+        this.recoveryStrategyProperties = recoveryStrategyProperties != null ? recoveryStrategyProperties : new RecoveryStrategyProperties();
         this.actionExecutors = actionExecutors;
         this.defaultActionExecutor = defaultActionExecutor;
         this.auditService = auditService;
@@ -86,13 +98,24 @@ public class RecoverySchedulerService {
     }
 
     public RecoverySchedulerService(RecoveryCaseRepository recoveryCaseRepository,
-                                  AgentDecisionRepository agentDecisionRepository,
-                                  RecoveryAttemptRepository recoveryAttemptRepository,
-                                  List<RecoveryActionExecutor> actionExecutors,
-                                  DefaultRecoveryActionExecutor defaultActionExecutor,
-                                  AuditService auditService,
-                                  RecoverySchedulerProperties properties) {
-        this(recoveryCaseRepository, agentDecisionRepository, recoveryAttemptRepository, null, actionExecutors, defaultActionExecutor, auditService, properties);
+                                    AgentDecisionRepository agentDecisionRepository,
+                                    RecoveryAttemptRepository recoveryAttemptRepository,
+                                    RecoveryStrategyService recoveryStrategyService,
+                                    List<RecoveryActionExecutor> actionExecutors,
+                                    DefaultRecoveryActionExecutor defaultActionExecutor,
+                                    AuditService auditService,
+                                    RecoverySchedulerProperties properties) {
+        this(recoveryCaseRepository, agentDecisionRepository, recoveryAttemptRepository, null, recoveryStrategyService, new RecoveryStrategyProperties(), actionExecutors, defaultActionExecutor, auditService, properties);
+    }
+
+    public RecoverySchedulerService(RecoveryCaseRepository recoveryCaseRepository,
+                                    AgentDecisionRepository agentDecisionRepository,
+                                    RecoveryAttemptRepository recoveryAttemptRepository,
+                                    List<RecoveryActionExecutor> actionExecutors,
+                                    DefaultRecoveryActionExecutor defaultActionExecutor,
+                                    AuditService auditService,
+                                    RecoverySchedulerProperties properties) {
+        this(recoveryCaseRepository, agentDecisionRepository, recoveryAttemptRepository, null, null, new RecoveryStrategyProperties(), actionExecutors, defaultActionExecutor, auditService, properties);
     }
 
     @Transactional
@@ -133,37 +156,21 @@ public class RecoverySchedulerService {
                     "An active recovery attempt is already scheduled or in-flight for case: " + recoveryCaseId);
         }
 
-        // 5. Retrieve and validate AgentDecision
-        AgentDecision agentDecision = agentDecisionRepository.findFirstByRecoveryCaseIdOrderByCreatedAtDesc(recoveryCaseId)
-                .orElseThrow(() -> new AgentDecisionNotFoundException(
-                        "No AgentDecision found for recovery case: " + recoveryCaseId + ". Run AI diagnosis first."));
-
-        if (!agentDecision.getMerchant().getId().equals(merchantId)) {
-            throw new RecoveryCaseNotFoundException(
-                    "AgentDecision merchant mismatch for recovery case: " + recoveryCaseId);
+        // 5. Configuration check
+        if (recoveryStrategyProperties != null && !recoveryStrategyProperties.isExecutionEnabled()) {
+            throw new StrategyExecutionDisabledException(
+                    "Recovery strategy execution is disabled by configuration");
         }
 
-        // 6. Strategy Engine evaluation
-        RecoveryChannel channel = agentDecision.getChannel() != null ? agentDecision.getChannel() : RecoveryChannel.MANUAL;
-        String recommendedAction = agentDecision.getRecommendedAction();
-        String strategyIdStr = "DIRECT";
+        // 6. Strategy resolution and validation
+        ResolvedStrategyResult strategyResult = resolveStrategy(recoveryCase, merchantId);
+        RecoveryStrategy strategy = strategyResult.strategy;
+        RecoveryChannel channel = strategyResult.channel;
+        String metadataJson = strategyResult.metadataJson;
+        String strategySnapshotJson = strategyResult.strategySnapshotJson;
 
-        if (recoveryStrategyService != null) {
-            RecoveryStrategy strategy = recoveryStrategyService.computeAndPersistStrategy(recoveryCase);
-            if (strategy.isTerminal()) {
-                if (TERMINAL_CASE_STATUSES.contains(recoveryCase.getStatus())) {
-                    throw new InvalidRecoveryCaseStateException(
-                            "Cannot schedule recovery for case in terminal status: " + recoveryCase.getStatus());
-                }
-                throw new NoViableStrategyException("Cannot schedule recovery: " + strategy.getReason());
-            }
-            channel = strategy.getChannel() != null ? strategy.getChannel() : RecoveryChannel.MANUAL;
-            recommendedAction = strategy.getRecommendedAction();
-            strategyIdStr = strategy.getId() != null ? strategy.getId().toString() : "UNKNOWN";
-
-            if (scheduledAt == null && strategy.getDelaySeconds() > 0) {
-                effectiveScheduledAt = now.plusSeconds(strategy.getDelaySeconds());
-            }
+        if (scheduledAt == null && strategy != null && strategy.getDelaySeconds() > 0) {
+            effectiveScheduledAt = now.plusSeconds(strategy.getDelaySeconds());
         }
 
         // 7. Safe attempt numbering via DB-backed sequence
@@ -180,18 +187,20 @@ public class RecoverySchedulerService {
         RecoveryAttempt attempt = RecoveryAttempt.builder()
                 .recoveryCase(recoveryCase)
                 .merchant(merchant)
+                .strategy(strategy)
+                .strategySnapshot(strategySnapshotJson)
                 .attemptNumber(nextAttemptNumber)
                 .channel(channel)
                 .status(RecoveryAttemptStatus.SCHEDULED)
                 .scheduledAt(effectiveScheduledAt)
-                .metadata(String.format("{\"agentDecisionId\":\"%s\",\"strategyId\":\"%s\",\"recommendedAction\":\"%s\"}",
-                        agentDecision.getId(), strategyIdStr, recommendedAction))
+                .metadata(metadataJson)
                 .build();
 
         RecoveryAttempt savedAttempt = recoveryAttemptRepository.save(attempt);
         String attemptIdStr = savedAttempt.getId() != null ? savedAttempt.getId().toString() : "UNKNOWN";
-        log.info("Scheduled RecoveryAttempt id={} for caseId={}, attemptNumber={}, channel={}, scheduledAt={}",
-                attemptIdStr, recoveryCaseId, nextAttemptNumber, channel, effectiveScheduledAt);
+        log.info("Scheduled RecoveryAttempt id={} for caseId={}, attemptNumber={}, channel={}, scheduledAt={}, strategyId={}",
+                attemptIdStr, recoveryCaseId, nextAttemptNumber, channel, effectiveScheduledAt,
+                strategy != null ? strategy.getId() : "NONE");
 
         // Record scheduling audit event
         auditService.recordEvent(
@@ -207,6 +216,160 @@ public class RecoverySchedulerService {
         );
 
         return RecoveryAttemptResponseDto.fromEntity(savedAttempt);
+    }
+
+    private ResolvedStrategyResult resolveStrategy(RecoveryCase recoveryCase, UUID merchantId) {
+        UUID caseId = recoveryCase.getId();
+        Merchant merchant = recoveryCase.getMerchant();
+        RecoveryStrategy strategy = null;
+
+        // 1. Try finding latest merchant-scoped strategy
+        if (recoveryStrategyRepository != null) {
+            strategy = recoveryStrategyRepository
+                    .findFirstByRecoveryCaseIdAndMerchantIdOrderByCreatedAtDesc(caseId, merchantId)
+                    .orElse(null);
+        }
+
+        // 2. If strategy exists, check viability; if not exists, check AgentDecision and compute strategy
+        if (strategy != null) {
+            if (strategy.getMerchant() != null && !strategy.getMerchant().getId().equals(merchantId)) {
+                throw new RecoveryCaseNotFoundException("Recovery strategy merchant mismatch for case: " + caseId);
+            }
+            if (strategy.getRecoveryCase() != null && !strategy.getRecoveryCase().getId().equals(caseId)) {
+                throw new RecoveryCaseNotFoundException("Recovery strategy case mismatch for case: " + caseId);
+            }
+
+            if (!isStrategyViable(strategy, recoveryCase) && recoveryStrategyService != null) {
+                log.info("Existing strategy id={} is not viable, regenerating fresh strategy for case id={}",
+                        strategy.getId(), caseId);
+                strategy = recoveryStrategyService.computeAndPersistStrategy(recoveryCase);
+            }
+        } else {
+            // No strategy exists yet. Check if AgentDecision exists before generating
+            AgentDecision agentDecision = agentDecisionRepository
+                    .findFirstByRecoveryCaseIdOrderByCreatedAtDesc(caseId)
+                    .orElseThrow(() -> new AgentDecisionNotFoundException(
+                            "No AgentDecision found for recovery case: " + caseId + ". Run AI diagnosis first."));
+
+            if (!agentDecision.getMerchant().getId().equals(merchantId)) {
+                throw new RecoveryCaseNotFoundException(
+                        "AgentDecision merchant mismatch for recovery case: " + caseId);
+            }
+
+            if (recoveryStrategyService != null) {
+                strategy = recoveryStrategyService.computeAndPersistStrategy(recoveryCase);
+            } else {
+                // Fallback for unit tests without strategy service wired
+                RecoveryChannel channel = agentDecision.getChannel() != null ? agentDecision.getChannel() : RecoveryChannel.MANUAL;
+                String recommendedAction = agentDecision.getRecommendedAction();
+                String metadata = String.format("{\"agentDecisionId\":\"%s\",\"strategyId\":\"DIRECT\",\"recommendedAction\":\"%s\"}",
+                        agentDecision.getId(), recommendedAction);
+
+                RecoveryStrategySnapshot snapshot = RecoveryStrategySnapshot.builder()
+                        .channel(channel)
+                        .recommendedAction(recommendedAction)
+                        .confidenceScore(agentDecision.getConfidenceScore())
+                        .reason(agentDecision.getReasoning())
+                        .build();
+
+                return new ResolvedStrategyResult(
+                        null,
+                        channel,
+                        recommendedAction,
+                        metadata,
+                        snapshot.toJson()
+                );
+            }
+        }
+
+        // 3. If strategy is present, validate it
+        if (strategy != null) {
+            String strategyIdStr = strategy.getId() != null ? strategy.getId().toString() : "UNKNOWN";
+
+            if (strategy.isTerminal()) {
+                auditService.recordEvent(
+                        merchant,
+                        "RECOVERY_STRATEGY_EXECUTION_REJECTED",
+                        ActorType.SYSTEM,
+                        "RecoveryScheduler",
+                        "RecoveryStrategy",
+                        strategyIdStr,
+                        "REJECT_STRATEGY",
+                        "Terminal strategy cannot be scheduled: " + strategy.getReason(),
+                        null
+                );
+
+                if (TERMINAL_CASE_STATUSES.contains(recoveryCase.getStatus())) {
+                    throw new InvalidRecoveryCaseStateException(
+                            "Cannot schedule recovery for case in terminal status: " + recoveryCase.getStatus());
+                }
+                throw new NoViableStrategyException("Cannot schedule recovery: " + strategy.getReason());
+            }
+
+            if (strategy.getChannel() == null || strategy.getRecommendedAction() == null) {
+                auditService.recordEvent(
+                        merchant,
+                        "RECOVERY_STRATEGY_EXECUTION_REJECTED",
+                        ActorType.SYSTEM,
+                        "RecoveryScheduler",
+                        "RecoveryStrategy",
+                        strategyIdStr,
+                        "REJECT_STRATEGY",
+                        "Strategy missing required channel or recommended action",
+                        null
+                );
+                throw new NoViableStrategyException("Cannot schedule recovery: strategy channel or action is invalid");
+            }
+
+            List<RecoveryAttempt> previousAttempts = recoveryAttemptRepository.findByRecoveryCaseIdOrderByAttemptNumberAsc(caseId);
+            if (previousAttempts != null && previousAttempts.size() >= strategy.getMaxAttempts()) {
+                auditService.recordEvent(
+                        merchant,
+                        "RECOVERY_STRATEGY_EXECUTION_REJECTED",
+                        ActorType.SYSTEM,
+                        "RecoveryScheduler",
+                        "RecoveryStrategy",
+                        strategyIdStr,
+                        "REJECT_STRATEGY",
+                        String.format("Maximum recovery attempts (%d) reached for case %s", strategy.getMaxAttempts(), caseId),
+                        null
+                );
+                throw new NoViableStrategyException("Cannot schedule recovery: maximum attempts exceeded");
+            }
+
+            RecoveryStrategySnapshot snapshot = RecoveryStrategySnapshot.fromStrategy(strategy);
+            String snapshotJson = snapshot != null ? snapshot.toJson() : null;
+
+            return new ResolvedStrategyResult(
+                    strategy,
+                    strategy.getChannel(),
+                    strategy.getRecommendedAction(),
+                    snapshotJson,
+                    snapshotJson
+            );
+        }
+
+        throw new NoViableStrategyException("No viable recovery strategy could be resolved for case: " + caseId);
+    }
+
+    private boolean isStrategyViable(RecoveryStrategy strategy, RecoveryCase recoveryCase) {
+        if (strategy == null || strategy.getChannel() == null) {
+            return false;
+        }
+        if (strategy.isTerminal()) {
+            return true; // Terminal strategies are valid policy decisions and must be rejected directly
+        }
+
+        Customer customer = recoveryCase.getCustomer();
+        boolean hasPhone = customer != null && customer.getPhone() != null && !customer.getPhone().trim().isEmpty();
+        boolean hasEmail = customer != null && customer.getEmail() != null && !customer.getEmail().trim().isEmpty();
+
+        return switch (strategy.getChannel()) {
+            case WHATSAPP, SMS -> hasPhone;
+            case EMAIL -> hasEmail;
+            case SMART_LINK -> hasPhone || hasEmail;
+            case RETRY_CHARGE, MANUAL -> true;
+        };
     }
 
     public int pollAndExecuteDueAttempts() {
@@ -262,6 +425,8 @@ public class RecoverySchedulerService {
         RecoveryCase recoveryCase = attempt.getRecoveryCase();
         Merchant merchant = attempt.getMerchant();
         String attemptIdStr = attempt.getId().toString();
+        RecoveryStrategy strategy = attempt.getStrategy();
+        String strategyIdStr = strategy != null && strategy.getId() != null ? strategy.getId().toString() : "DIRECT";
 
         // 2. Guard against terminal RecoveryCases
         if (TERMINAL_CASE_STATUSES.contains(recoveryCase.getStatus())) {
@@ -320,7 +485,20 @@ public class RecoverySchedulerService {
                 null
         );
 
-        // 5. Execute via channel-specific Action Executor
+        auditService.recordEvent(
+                merchant,
+                "RECOVERY_STRATEGY_EXECUTION_STARTED",
+                ActorType.SYSTEM,
+                "RecoveryScheduler",
+                "RecoveryStrategy",
+                strategyIdStr,
+                "EXECUTE_STRATEGY",
+                String.format("Executing scheduled strategy decision on channel %s for attempt #%d",
+                        attempt.getChannel(), attempt.getAttemptNumber()),
+                null
+        );
+
+        // 5. Execute via channel-specific Action Executor (authoritative persisted channel from strategy)
         try {
             RecoveryActionExecutor executor = findExecutor(attempt.getChannel());
             ExecutionResult result = executor.execute(attempt, recoveryCase);
@@ -347,25 +525,73 @@ public class RecoverySchedulerService {
 
             recoveryAttemptRepository.save(attempt);
 
-            String eventType = switch (result.getStatus()) {
-                case SUCCESS -> "RECOVERY_ATTEMPT_SUCCEEDED";
-                case SENT, DELIVERED -> "RECOVERY_ATTEMPT_SENT";
-                case SKIPPED -> "RECOVERY_ATTEMPT_SKIPPED";
-                default -> "RECOVERY_ATTEMPT_FAILED";
-            };
+            if (result.getStatus() == RecoveryAttemptStatus.SUCCESS) {
+                auditService.recordEvent(
+                        merchant,
+                        "RECOVERY_ATTEMPT_SUCCEEDED",
+                        ActorType.SYSTEM,
+                        "RecoveryScheduler",
+                        "RecoveryAttempt",
+                        attemptIdStr,
+                        "COMPLETE_ATTEMPT",
+                        String.format("Attempt #%d completed with status SUCCESS: %s",
+                                attempt.getAttemptNumber(), result.getResultMessage()),
+                        null
+                );
 
-            auditService.recordEvent(
-                    merchant,
-                    eventType,
-                    ActorType.SYSTEM,
-                    "RecoveryScheduler",
-                    "RecoveryAttempt",
-                    attemptIdStr,
-                    "COMPLETE_ATTEMPT",
-                    String.format("Attempt #%d completed with status %s: %s",
-                            attempt.getAttemptNumber(), result.getStatus(), result.getResultMessage()),
-                    null
-            );
+                auditService.recordEvent(
+                        merchant,
+                        "RECOVERY_STRATEGY_EXECUTION_SUCCEEDED",
+                        ActorType.SYSTEM,
+                        "RecoveryScheduler",
+                        "RecoveryStrategy",
+                        strategyIdStr,
+                        "COMPLETE_STRATEGY_EXECUTION",
+                        String.format("Strategy execution on channel %s succeeded for attempt #%d",
+                                attempt.getChannel(), attempt.getAttemptNumber()),
+                        null
+                );
+            } else if (result.getStatus() == RecoveryAttemptStatus.SENT || result.getStatus() == RecoveryAttemptStatus.DELIVERED) {
+                auditService.recordEvent(
+                        merchant,
+                        "RECOVERY_ATTEMPT_SENT",
+                        ActorType.SYSTEM,
+                        "RecoveryScheduler",
+                        "RecoveryAttempt",
+                        attemptIdStr,
+                        "COMPLETE_ATTEMPT",
+                        String.format("Attempt #%d dispatched with status %s: %s",
+                                attempt.getAttemptNumber(), result.getStatus(), result.getResultMessage()),
+                        null
+                );
+
+                auditService.recordEvent(
+                        merchant,
+                        "RECOVERY_STRATEGY_EXECUTION_SUCCEEDED",
+                        ActorType.SYSTEM,
+                        "RecoveryScheduler",
+                        "RecoveryStrategy",
+                        strategyIdStr,
+                        "DISPATCH_STRATEGY",
+                        String.format("Strategy action dispatched on channel %s for attempt #%d",
+                                attempt.getChannel(), attempt.getAttemptNumber()),
+                        null
+                );
+            } else if (result.getStatus() == RecoveryAttemptStatus.SKIPPED) {
+                auditService.recordEvent(
+                        merchant,
+                        "RECOVERY_ATTEMPT_SKIPPED",
+                        ActorType.SYSTEM,
+                        "RecoveryScheduler",
+                        "RecoveryAttempt",
+                        attemptIdStr,
+                        "COMPLETE_ATTEMPT",
+                        String.format("Attempt #%d skipped: %s", attempt.getAttemptNumber(), result.getResultMessage()),
+                        null
+                );
+            } else {
+                handleExecutionFailure(attempt, merchant, attemptIdStr, strategyIdStr, strategy, result.getResultMessage());
+            }
 
         } catch (Exception ex) {
             log.error("Execution error during recovery attempt id={}: {}", attemptIdStr, ex.getMessage(), ex);
@@ -375,20 +601,57 @@ public class RecoverySchedulerService {
             attempt.setResultMessage("Execution failed: " + ex.getMessage());
             recoveryAttemptRepository.save(attempt);
 
-            auditService.recordEvent(
-                    merchant,
-                    "RECOVERY_ATTEMPT_FAILED",
-                    ActorType.SYSTEM,
-                    "RecoveryScheduler",
-                    "RecoveryAttempt",
-                    attemptIdStr,
-                    "FAIL_ATTEMPT",
-                    "Execution failed: " + ex.getMessage(),
-                    null
-            );
+            handleExecutionFailure(attempt, merchant, attemptIdStr, strategyIdStr, strategy, ex.getMessage());
         }
 
         return true;
+    }
+
+    private void handleExecutionFailure(RecoveryAttempt attempt,
+                                        Merchant merchant,
+                                        String attemptIdStr,
+                                        String strategyIdStr,
+                                        RecoveryStrategy strategy,
+                                        String errorMessage) {
+        auditService.recordEvent(
+                merchant,
+                "RECOVERY_ATTEMPT_FAILED",
+                ActorType.SYSTEM,
+                "RecoveryScheduler",
+                "RecoveryAttempt",
+                attemptIdStr,
+                "FAIL_ATTEMPT",
+                "Execution failed: " + errorMessage,
+                null
+        );
+
+        auditService.recordEvent(
+                merchant,
+                "RECOVERY_STRATEGY_EXECUTION_FAILED",
+                ActorType.SYSTEM,
+                "RecoveryScheduler",
+                "RecoveryStrategy",
+                strategyIdStr,
+                "FAIL_STRATEGY_EXECUTION",
+                String.format("Strategy execution failed on channel %s for attempt #%d: %s",
+                        attempt.getChannel(), attempt.getAttemptNumber(), errorMessage),
+                null
+        );
+
+        if (strategy != null && strategy.getFallbackChannel() != null && recoveryStrategyProperties.isFallbackEnabled()) {
+            auditService.recordEvent(
+                    merchant,
+                    "RECOVERY_STRATEGY_FALLBACK_SELECTED",
+                    ActorType.SYSTEM,
+                    "RecoveryScheduler",
+                    "RecoveryStrategy",
+                    strategyIdStr,
+                    "SELECT_FALLBACK",
+                    String.format("Fallback channel %s (action: %s) selected for subsequent recovery attempt following failure on %s",
+                            strategy.getFallbackChannel(), strategy.getFallbackAction(), attempt.getChannel()),
+                    null
+            );
+        }
     }
 
     private RecoveryActionExecutor findExecutor(RecoveryChannel channel) {
@@ -406,4 +669,12 @@ public class RecoverySchedulerService {
         Optional<RecoveryAttempt> topAttempt = recoveryAttemptRepository.findTopByRecoveryCaseIdOrderByAttemptNumberDesc(recoveryCaseId);
         return topAttempt.map(attempt -> attempt.getAttemptNumber() + 1).orElse(1);
     }
+
+    private record ResolvedStrategyResult(
+            RecoveryStrategy strategy,
+            RecoveryChannel channel,
+            String recommendedAction,
+            String metadataJson,
+            String strategySnapshotJson
+    ) {}
 }

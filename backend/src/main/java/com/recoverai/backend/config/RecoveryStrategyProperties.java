@@ -10,6 +10,7 @@ import java.math.BigDecimal;
 public class RecoveryStrategyProperties {
 
     private boolean enabled = true;
+    private boolean executionEnabled = true;
     private BigDecimal minAiConfidence = new BigDecimal("0.70");
     private int maxAttempts = 3;
     private boolean retryChargeEnabled = true;
@@ -27,6 +28,14 @@ public class RecoveryStrategyProperties {
 
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
+    }
+
+    public boolean isExecutionEnabled() {
+        return executionEnabled;
+    }
+
+    public void setExecutionEnabled(boolean executionEnabled) {
+        this.executionEnabled = executionEnabled;
     }
 
     public BigDecimal getMinAiConfidence() {

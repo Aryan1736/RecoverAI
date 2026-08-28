@@ -1132,7 +1132,55 @@ All strategy evaluations are recorded to the immutable `audit_events` log with `
 - `RECOVERY_STRATEGY_GENERATED`: Successfully created actionable strategy.
 - `RECOVERY_STRATEGY_FALLBACK`: Fallback channel selected due to contact/failure constraints.
 - `RECOVERY_STRATEGY_TERMINAL`: Terminal case or max attempts limit encountered.
-- `RECOVERY_STRATEGY_REJECTED`: Unviable strategy or execution prevented.
+---
+
+## Strategy-Driven Recovery Execution Integration (PR #13)
+
+The Strategy-Driven Recovery Execution Integration layer establishes the Deterministic Recovery Strategy Engine as the authoritative policy decision for all recovery execution workflows across both synchronous orchestration and asynchronous background scheduling.
+
+### Key Architectural Concepts
+
+1. **Strategy-Driven Authority**:
+   - Recovery execution flows (`/orchestrate` and `/schedule`) strictly resolve the latest valid merchant-scoped `RecoveryStrategy`.
+   - AI recommendations (`AgentDecision`) serve as inputs to the Strategy Engine; the engine synthesizes AI confidence, contact viability, payment retry eligibility, and previous attempt failures into an executable policy.
+   - If no strategy exists or an existing strategy is stale/unviable, the system automatically and deterministically generates and persists a fresh strategy before execution.
+
+2. **Immutable Strategy Execution Snapshot**:
+   - Each `RecoveryAttempt` persists a safe, immutable snapshot (`strategy_snapshot` JSON and `strategy_id` FK reference) of the strategy that generated it.
+   - Snapshot fields: `strategyId`, `channel`, `recommendedAction`, `confidenceScore`, `priority`, `fallbackChannel`, `fallbackAction`, `reason`.
+   - Sensitive credentials, API keys, raw Gemini prompts, and cardholder data are strictly excluded from snapshots and audit logs.
+
+3. **Fallback & Retry Protection**:
+   - When channel execution fails, the strategy's configured fallback channel is evaluated for subsequent attempts.
+   - Immediate retries of failed channels are prevented; subsequent attempts respect configured channel failure limits and maximum attempt bounds, preventing infinite fallback loops.
+   - Every fallback selection is recorded in the immutable audit log (`RECOVERY_STRATEGY_FALLBACK_SELECTED`).
+
+4. **Background Worker Consistency**:
+   - Background scheduler workers (`RecoverySchedulerWorker`) claim scheduled attempts atomically and execute the exact persisted strategy channel recorded in the attempt snapshot, preventing uncoordinated recalculations at runtime.
+
+---
+
+### Configuration
+
+| Property | Environment Variable | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `recoverai.recovery.strategy.execution-enabled` | `RECOVERY_STRATEGY_EXECUTION_ENABLED` | `true` | Master switch for strategy-driven execution. If disabled, rejects execution with HTTP 422. |
+| `recoverai.recovery.strategy.enabled` | `RECOVERY_STRATEGY_ENABLED` | `true` | Enables deterministic strategy engine evaluation. |
+| `recoverai.recovery.strategy.min-ai-confidence` | `RECOVERY_STRATEGY_MIN_AI_CONFIDENCE` | `0.70` | Confidence threshold for trusting AI channel recommendations. |
+| `recoverai.recovery.strategy.max-attempts` | `RECOVERY_STRATEGY_MAX_ATTEMPTS` | `3` | Maximum recovery attempts allowed per recovery case. |
+| `recoverai.recovery.strategy.retry-charge-enabled`| `RECOVERY_STRATEGY_RETRY_CHARGE_ENABLED` | `true` | Enables automated payment retry for eligible failure categories. |
+| `recoverai.recovery.strategy.fallback-enabled` | `RECOVERY_STRATEGY_FALLBACK_ENABLED` | `true` | Enables fallback channel selection on execution failure. |
+
+---
+
+### Audit Logging Events
+
+Strategy execution records structured audit events with `ActorType.SYSTEM`:
+- `RECOVERY_STRATEGY_EXECUTION_STARTED`: Dispatched strategy execution for a recovery attempt.
+- `RECOVERY_STRATEGY_EXECUTION_SUCCEEDED`: Successful execution or delivery of strategy action.
+- `RECOVERY_STRATEGY_EXECUTION_FAILED`: Failure during channel execution.
+- `RECOVERY_STRATEGY_FALLBACK_SELECTED`: Selected configured fallback channel following an attempt failure.
+- `RECOVERY_STRATEGY_EXECUTION_REJECTED`: Rejected execution due to terminal strategy, exceeded max attempts, or disabled configuration.
 
 ---
 
@@ -1151,6 +1199,8 @@ All strategy evaluations are recorded to the immutable `audit_events` log with `
   - `feature/merchant-dashboard-api`: Merchant Dashboard & Recovery Case Management API (`GET /api/v1/dashboard/summary`, `GET /api/v1/recovery-cases`, `GET /api/v1/recovery-cases/{id}`, `GET /api/v1/recovery-cases/{id}/attempts`, `PATCH /api/v1/recovery-cases/{id}/cancel`, Flyway V7 indexes, JPA dynamic specifications, multi-tenant scoping).
   - `feature/recovery-analytics`: Comprehensive Recovery Analytics & Reporting Engine (`GET /api/v1/analytics/overview`, `GET /api/v1/analytics/recovery-trends`, `GET /api/v1/analytics/failures`, `GET /api/v1/analytics/channels`, `GET /api/v1/analytics/attempts`, Flyway V8 analytics indexes, database aggregation projections, ISO date-range validation, and automated multi-tenant test suites).
   - `feature/recovery-strategy-engine`: Deterministic Recovery Strategy Engine (`RecoveryStrategyEngine`, `RecoveryStrategyService`, `RecoveryStrategyController`, `RecoveryStrategyRepository`, Flyway V9 `recovery_strategies` migration, strongly-typed `RecoveryStrategyProperties`, deterministic policy evaluation, confidence thresholding, payment retry guard, channel viability & fallback cascading, max-attempt enforcement, tenant isolation, and audit trails).
+  - `feature/strategy-execution-integration`: Strategy-Driven Recovery Execution Integration (Flyway V10 `strategy_snapshot` and `strategy_id` migration, `RecoveryStrategySnapshot` immutable policy snapshot, strategy-aware orchestration & scheduling, delay resolution, atomic worker execution, fallback audit trails, and multi-tenant security guarantees).
+
 
 
 

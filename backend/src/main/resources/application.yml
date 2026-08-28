@@ -72,6 +72,7 @@ recoverai:
       batch-size: ${RECOVERY_SCHEDULER_BATCH_SIZE:50}
     strategy:
       enabled: ${RECOVERY_STRATEGY_ENABLED:true}
+      execution-enabled: ${RECOVERY_STRATEGY_EXECUTION_ENABLED:true}
       min-ai-confidence: ${RECOVERY_STRATEGY_MIN_AI_CONFIDENCE:0.70}
       max-attempts: ${RECOVERY_STRATEGY_MAX_ATTEMPTS:3}
       retry-charge-enabled: ${RECOVERY_STRATEGY_RETRY_CHARGE_ENABLED:true}

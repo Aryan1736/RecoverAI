@@ -73,6 +73,13 @@ public class RecoveryAttempt {
     @Column(name = "result_message", columnDefinition = "TEXT")
     private String resultMessage;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "strategy_id")
+    private RecoveryStrategy strategy;
+
+    @Column(name = "strategy_snapshot", columnDefinition = "TEXT")
+    private String strategySnapshot;
+
     @Column(name = "recovery_link", length = 1000)
     private String recoveryLink;
 
@@ -93,9 +100,21 @@ public class RecoveryAttempt {
                            Instant executedAt, Instant completedAt, String resultCode,
                            String resultMessage, String recoveryLink, String metadata,
                            Instant createdAt, Instant updatedAt) {
+        this(id, recoveryCase, merchant, null, null, attemptNumber, channel, status, scheduledAt,
+                executedAt, completedAt, resultCode, resultMessage, recoveryLink, metadata, createdAt, updatedAt);
+    }
+
+    public RecoveryAttempt(UUID id, RecoveryCase recoveryCase, Merchant merchant,
+                           RecoveryStrategy strategy, String strategySnapshot,
+                           int attemptNumber, RecoveryChannel channel, RecoveryAttemptStatus status,
+                           Instant scheduledAt, Instant executedAt, Instant completedAt,
+                           String resultCode, String resultMessage, String recoveryLink, String metadata,
+                           Instant createdAt, Instant updatedAt) {
         this.id = id;
         this.recoveryCase = recoveryCase;
         this.merchant = merchant;
+        this.strategy = strategy;
+        this.strategySnapshot = strategySnapshot;
         this.attemptNumber = attemptNumber;
         this.channel = channel;
         this.status = status != null ? status : RecoveryAttemptStatus.SCHEDULED;
@@ -221,6 +240,22 @@ public class RecoveryAttempt {
         this.resultMessage = resultMessage;
     }
 
+    public RecoveryStrategy getStrategy() {
+        return strategy;
+    }
+
+    public void setStrategy(RecoveryStrategy strategy) {
+        this.strategy = strategy;
+    }
+
+    public String getStrategySnapshot() {
+        return strategySnapshot;
+    }
+
+    public void setStrategySnapshot(String strategySnapshot) {
+        this.strategySnapshot = strategySnapshot;
+    }
+
     public String getRecoveryLink() {
         return recoveryLink;
     }
@@ -270,6 +305,8 @@ public class RecoveryAttempt {
         private UUID id;
         private RecoveryCase recoveryCase;
         private Merchant merchant;
+        private RecoveryStrategy strategy;
+        private String strategySnapshot;
         private int attemptNumber = 1;
         private RecoveryChannel channel;
         private RecoveryAttemptStatus status = RecoveryAttemptStatus.SCHEDULED;
@@ -298,6 +335,16 @@ public class RecoveryAttempt {
 
         public RecoveryAttemptBuilder merchant(Merchant merchant) {
             this.merchant = merchant;
+            return this;
+        }
+
+        public RecoveryAttemptBuilder strategy(RecoveryStrategy strategy) {
+            this.strategy = strategy;
+            return this;
+        }
+
+        public RecoveryAttemptBuilder strategySnapshot(String strategySnapshot) {
+            this.strategySnapshot = strategySnapshot;
             return this;
         }
 
@@ -362,9 +409,9 @@ public class RecoveryAttempt {
         }
 
         public RecoveryAttempt build() {
-            return new RecoveryAttempt(id, recoveryCase, merchant, attemptNumber, channel,
-                    status, scheduledAt, executedAt, completedAt, resultCode, resultMessage,
-                    recoveryLink, metadata, createdAt, updatedAt);
+            return new RecoveryAttempt(id, recoveryCase, merchant, strategy, strategySnapshot,
+                    attemptNumber, channel, status, scheduledAt, executedAt, completedAt,
+                    resultCode, resultMessage, recoveryLink, metadata, createdAt, updatedAt);
         }
     }
 }

@@ -4,14 +4,16 @@ import com.recoverai.backend.config.RecoveryCommunicationProperties;
 import com.recoverai.backend.service.provider.PaymentRetryProvider;
 import com.recoverai.backend.service.provider.dto.PaymentRetryRequest;
 import com.recoverai.backend.service.provider.dto.PaymentRetryResult;
+import com.recoverai.backend.service.provider.health.ProviderHealthCheck;
+import com.recoverai.backend.service.provider.health.ProviderHealthResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.UUID;
 
-@Component
-public class MockPaymentRetryProvider implements PaymentRetryProvider {
+@Component("mockPaymentRetryProvider")
+public class MockPaymentRetryProvider implements PaymentRetryProvider, ProviderHealthCheck {
 
     private static final Logger log = LoggerFactory.getLogger(MockPaymentRetryProvider.class);
 
@@ -45,7 +47,7 @@ public class MockPaymentRetryProvider implements PaymentRetryProvider {
         }
 
         String metadata = String.format("{\"provider\":\"MOCK_RAZORPAY\",\"transactionId\":\"%s\",\"simulated\":true,\"status\":\"captured\"}",
-                transactionId);
+                    transactionId);
 
         return PaymentRetryResult.success(
                 transactionId,
@@ -55,4 +57,23 @@ public class MockPaymentRetryProvider implements PaymentRetryProvider {
                 metadata
         );
     }
+
+    @Override
+    public ProviderHealthResult checkHealth() {
+        if (!properties.getRetryCharge().isAutoRetryEnabled()) {
+            return ProviderHealthResult.disabled("MOCK_RAZORPAY", "PAYMENT_RETRY", "Mock payment retry disabled");
+        }
+        return ProviderHealthResult.available("MOCK_RAZORPAY", "PAYMENT_RETRY", "Mock payment retry provider active");
+    }
+
+    @Override
+    public String getProviderIdentifier() {
+        return "mock";
+    }
+
+    @Override
+    public String getProviderCategory() {
+        return "PAYMENT_RETRY";
+    }
 }
+

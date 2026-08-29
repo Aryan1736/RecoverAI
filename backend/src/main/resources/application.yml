@@ -52,18 +52,44 @@ recoverai:
       provider: ${WHATSAPP_PROVIDER:mock}
       sender-number: ${WHATSAPP_SENDER_NUMBER:+14155238886}
       api-key: ${WHATSAPP_API_KEY:}
+      account-sid: ${WHATSAPP_ACCOUNT_SID:}
+      auth-token: ${WHATSAPP_AUTH_TOKEN:}
+      api-base-url: ${WHATSAPP_API_BASE_URL:https://api.twilio.com}
     email:
       provider: ${EMAIL_PROVIDER:mock}
       from-address: ${EMAIL_FROM_ADDRESS:recover@recoverai.io}
       from-name: ${EMAIL_FROM_NAME:RecoverAI Payment Recovery}
       api-key: ${EMAIL_API_KEY:}
+      api-base-url: ${EMAIL_API_BASE_URL:https://api.sendgrid.com}
+      smtp:
+        host: ${SMTP_HOST:localhost}
+        port: ${SMTP_PORT:587}
+        username: ${SMTP_USERNAME:}
+        password: ${SMTP_PASSWORD:}
+        tls-enabled: ${SMTP_TLS_ENABLED:true}
     sms:
       provider: ${SMS_PROVIDER:mock}
       sender-id: ${SMS_SENDER_ID:RECOVER}
       api-key: ${SMS_API_KEY:}
+      account-sid: ${SMS_ACCOUNT_SID:}
+      auth-token: ${SMS_AUTH_TOKEN:}
+      api-base-url: ${SMS_API_BASE_URL:https://api.twilio.com}
     retry-charge:
       provider: ${RETRY_CHARGE_PROVIDER:mock}
       auto-retry-enabled: ${RETRY_CHARGE_ENABLED:true}
+      key-id: ${RAZORPAY_KEY_ID:}
+      key-secret: ${RAZORPAY_KEY_SECRET:}
+      api-base-url: ${RAZORPAY_API_BASE_URL:https://api.razorpay.com}
+    http:
+      connect-timeout-ms: ${RECOVERY_PROVIDER_CONNECT_TIMEOUT_MS:5000}
+      read-timeout-ms: ${RECOVERY_PROVIDER_READ_TIMEOUT_MS:10000}
+    retry:
+      base-delay-seconds: ${RECOVERY_PROVIDER_RETRY_BASE_DELAY_SECONDS:60}
+      max-delay-seconds: ${RECOVERY_PROVIDER_RETRY_MAX_DELAY_SECONDS:3600}
+    link:
+      secret: ${RECOVERY_LINK_SECRET:recoverai-secure-recovery-link-secret-token-key}
+      expiration-seconds: ${RECOVERY_LINK_EXPIRATION_SECONDS:86400}
+      use-signed-tokens: ${RECOVERY_LINK_USE_SIGNED_TOKENS:false}
     webhook:
       signature-header: ${RECOVERY_OUTCOME_WEBHOOK_SIGNATURE_HEADER:X-Recovery-Signature}
     scheduler:

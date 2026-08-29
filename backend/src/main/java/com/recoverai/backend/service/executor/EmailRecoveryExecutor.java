@@ -76,7 +76,8 @@ public class EmailRecoveryExecutor implements RecoveryActionExecutor {
                     deliveryResult.getResultCode() != null ? deliveryResult.getResultCode() : "EMAIL_DELIVERY_FAILED",
                     deliveryResult.getResultMessage(),
                     recoveryLink,
-                    deliveryResult.getMetadata()
+                    deliveryResult.getMetadata(),
+                    deliveryResult.getFailureType()
             );
         }
     }

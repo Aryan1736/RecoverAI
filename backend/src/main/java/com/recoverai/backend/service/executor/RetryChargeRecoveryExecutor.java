@@ -67,7 +67,8 @@ public class RetryChargeRecoveryExecutor implements RecoveryActionExecutor {
                     retryResult.getResultCode() != null ? retryResult.getResultCode() : "PAYMENT_RETRY_FAILED",
                     retryResult.getResultMessage(),
                     null,
-                    retryResult.getMetadata()
+                    retryResult.getMetadata(),
+                    retryResult.getFailureType()
             );
         }
     }

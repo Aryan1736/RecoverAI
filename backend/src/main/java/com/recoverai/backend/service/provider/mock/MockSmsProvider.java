@@ -3,14 +3,16 @@ package com.recoverai.backend.service.provider.mock;
 import com.recoverai.backend.service.provider.SmsProvider;
 import com.recoverai.backend.service.provider.dto.CommunicationDeliveryResult;
 import com.recoverai.backend.service.provider.dto.SmsMessageRequest;
+import com.recoverai.backend.service.provider.health.ProviderHealthCheck;
+import com.recoverai.backend.service.provider.health.ProviderHealthResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.UUID;
 
-@Component
-public class MockSmsProvider implements SmsProvider {
+@Component("mockSmsProvider")
+public class MockSmsProvider implements SmsProvider, ProviderHealthCheck {
 
     private static final Logger log = LoggerFactory.getLogger(MockSmsProvider.class);
 
@@ -41,4 +43,20 @@ public class MockSmsProvider implements SmsProvider {
         }
         return phone.substring(0, Math.min(3, phone.length())) + "****" + phone.substring(phone.length() - 2);
     }
+
+    @Override
+    public ProviderHealthResult checkHealth() {
+        return ProviderHealthResult.available("MOCK_SMS", "SMS", "Mock SMS provider active");
+    }
+
+    @Override
+    public String getProviderIdentifier() {
+        return "mock";
+    }
+
+    @Override
+    public String getProviderCategory() {
+        return "SMS";
+    }
 }
+

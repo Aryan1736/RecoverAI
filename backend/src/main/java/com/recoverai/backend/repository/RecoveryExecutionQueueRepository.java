@@ -49,20 +49,20 @@ public interface RecoveryExecutionQueueRepository extends JpaRepository<Recovery
     @Modifying
     @Query("UPDATE RecoveryExecutionQueueItem q SET q.status = com.recoverai.backend.entity.enums.RecoveryQueueStatus.PROCESSING, " +
             "q.startedAt = :now, q.updatedAt = :now " +
-            "WHERE q.id = :id AND q.status = com.recoverai.backend.entity.enums.RecoveryQueueStatus.CLAIMED")
+            "WHERE q.id = :id AND (q.status = com.recoverai.backend.entity.enums.RecoveryQueueStatus.CLAIMED OR q.status = com.recoverai.backend.entity.enums.RecoveryQueueStatus.READY)")
     int markProcessing(@Param("id") UUID id, @Param("now") Instant now);
 
     @Modifying
     @Query("UPDATE RecoveryExecutionQueueItem q SET q.status = com.recoverai.backend.entity.enums.RecoveryQueueStatus.COMPLETED, " +
             "q.completedAt = :now, q.updatedAt = :now " +
-            "WHERE q.id = :id AND (q.status = com.recoverai.backend.entity.enums.RecoveryQueueStatus.PROCESSING OR q.status = com.recoverai.backend.entity.enums.RecoveryQueueStatus.CLAIMED)")
+            "WHERE q.id = :id AND (q.status = com.recoverai.backend.entity.enums.RecoveryQueueStatus.PROCESSING OR q.status = com.recoverai.backend.entity.enums.RecoveryQueueStatus.CLAIMED OR q.status = com.recoverai.backend.entity.enums.RecoveryQueueStatus.READY)")
     int markCompleted(@Param("id") UUID id, @Param("now") Instant now);
 
     @Modifying
     @Query("UPDATE RecoveryExecutionQueueItem q SET q.status = com.recoverai.backend.entity.enums.RecoveryQueueStatus.READY, " +
             "q.retryCount = q.retryCount + 1, q.availableAt = :nextAvailableAt, q.claimedAt = NULL, q.claimedBy = NULL, q.startedAt = NULL, " +
             "q.lastErrorCode = :errorCode, q.lastErrorMessage = :errorMessage, q.updatedAt = :now " +
-            "WHERE q.id = :id AND (q.status = com.recoverai.backend.entity.enums.RecoveryQueueStatus.PROCESSING OR q.status = com.recoverai.backend.entity.enums.RecoveryQueueStatus.CLAIMED)")
+            "WHERE q.id = :id AND (q.status = com.recoverai.backend.entity.enums.RecoveryQueueStatus.PROCESSING OR q.status = com.recoverai.backend.entity.enums.RecoveryQueueStatus.CLAIMED OR q.status = com.recoverai.backend.entity.enums.RecoveryQueueStatus.READY)")
     int rescheduleForRetry(@Param("id") UUID id,
                            @Param("nextAvailableAt") Instant nextAvailableAt,
                            @Param("errorCode") String errorCode,

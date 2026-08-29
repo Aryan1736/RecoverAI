@@ -74,7 +74,8 @@ public class SmsRecoveryExecutor implements RecoveryActionExecutor {
                     deliveryResult.getResultCode() != null ? deliveryResult.getResultCode() : "SMS_DELIVERY_FAILED",
                     deliveryResult.getResultMessage(),
                     recoveryLink,
-                    deliveryResult.getMetadata()
+                    deliveryResult.getMetadata(),
+                    deliveryResult.getFailureType()
             );
         }
     }

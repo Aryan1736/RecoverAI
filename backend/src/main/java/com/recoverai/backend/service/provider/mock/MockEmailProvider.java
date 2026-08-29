@@ -3,14 +3,16 @@ package com.recoverai.backend.service.provider.mock;
 import com.recoverai.backend.service.provider.EmailProvider;
 import com.recoverai.backend.service.provider.dto.CommunicationDeliveryResult;
 import com.recoverai.backend.service.provider.dto.EmailMessageRequest;
+import com.recoverai.backend.service.provider.health.ProviderHealthCheck;
+import com.recoverai.backend.service.provider.health.ProviderHealthResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.UUID;
 
-@Component
-public class MockEmailProvider implements EmailProvider {
+@Component("mockEmailProvider")
+public class MockEmailProvider implements EmailProvider, ProviderHealthCheck {
 
     private static final Logger log = LoggerFactory.getLogger(MockEmailProvider.class);
 
@@ -45,4 +47,20 @@ public class MockEmailProvider implements EmailProvider {
         }
         return email.charAt(0) + "***@" + email.substring(atIndex + 1);
     }
+
+    @Override
+    public ProviderHealthResult checkHealth() {
+        return ProviderHealthResult.available("MOCK_EMAIL", "EMAIL", "Mock Email provider active");
+    }
+
+    @Override
+    public String getProviderIdentifier() {
+        return "mock";
+    }
+
+    @Override
+    public String getProviderCategory() {
+        return "EMAIL";
+    }
 }
+

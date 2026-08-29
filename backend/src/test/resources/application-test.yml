@@ -55,6 +55,13 @@ recoverai:
     retry-charge:
       provider: mock
       auto-retry-enabled: true
+    retry:
+      base-delay-seconds: 1
+      max-delay-seconds: 10
+    link:
+      secret: test-secure-recovery-link-secret-key-32-chars-long
+      expiration-seconds: 86400
+      use-signed-tokens: false
     webhook:
       signature-header: X-Recovery-Signature
     scheduler:

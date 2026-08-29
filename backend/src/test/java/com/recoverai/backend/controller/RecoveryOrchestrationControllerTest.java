@@ -32,6 +32,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -252,7 +254,8 @@ class RecoveryOrchestrationControllerTest {
     @Test
     @DisplayName("POST /api/v1/recovery-cases/{id}/schedule with header should return 200 OK and SCHEDULED status")
     void shouldScheduleWithHeader() throws Exception {
-        String requestBody = "{\"scheduledAt\":\"2026-08-28T22:00:00Z\"}";
+        Instant futureTime = Instant.now().plus(1, ChronoUnit.HOURS).truncatedTo(ChronoUnit.SECONDS);
+        String requestBody = "{\"scheduledAt\":\"" + futureTime.toString() + "\"}";
 
         mockMvc.perform(post("/api/v1/recovery-cases/{id}/schedule", recoveryCase.getId())
                         .header("Authorization", "Bearer " + token)
@@ -266,7 +269,7 @@ class RecoveryOrchestrationControllerTest {
                 .andExpect(jsonPath("$.attemptNumber").value(1))
                 .andExpect(jsonPath("$.channel").value("WHATSAPP"))
                 .andExpect(jsonPath("$.status").value("SCHEDULED"))
-                .andExpect(jsonPath("$.scheduledAt").value("2026-08-28T22:00:00Z"))
+                .andExpect(jsonPath("$.scheduledAt").value(futureTime.toString()))
                 .andExpect(jsonPath("$.executedAt").isEmpty());
     }
 

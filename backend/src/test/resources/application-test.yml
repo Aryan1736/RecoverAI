@@ -61,6 +61,14 @@ recoverai:
       enabled: false
       polling-interval-ms: 5000
       batch-size: 50
+    queue:
+      enabled: false
+      poll-interval-ms: 3000
+      batch-size: 25
+      max-retries: 3
+      retry-delay-seconds: 300
+      worker-id: test-worker
+      claim-timeout-seconds: 300
     strategy:
       enabled: true
       min-ai-confidence: 0.70

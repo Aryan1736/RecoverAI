@@ -19,6 +19,7 @@ import com.recoverai.backend.repository.MerchantRepository;
 import com.recoverai.backend.repository.PaymentRepository;
 import com.recoverai.backend.repository.RecoveryAttemptRepository;
 import com.recoverai.backend.repository.RecoveryCaseRepository;
+import com.recoverai.backend.repository.RecoveryExecutionQueueRepository;
 import com.recoverai.backend.service.RecoverySchedulerService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -74,12 +75,16 @@ class RecoverySchedulerIntegrationTest {
     @Autowired
     private com.recoverai.backend.repository.AuditEventRepository auditEventRepository;
 
+    @Autowired
+    private RecoveryExecutionQueueRepository queueRepository;
+
     private Merchant merchant;
     private Customer customer;
 
     @BeforeEach
     void setUp() {
         auditEventRepository.deleteAll();
+        queueRepository.deleteAll();
         recoveryAttemptRepository.deleteAll();
         agentDecisionRepository.deleteAll();
         recoveryCaseRepository.deleteAll();

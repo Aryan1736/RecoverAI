@@ -69,6 +69,7 @@ public class RecoverySchedulerService {
     private final DefaultRecoveryActionExecutor defaultActionExecutor;
     private final AuditService auditService;
     private final RecoverySchedulerProperties properties;
+    private final RecoveryExecutionQueueService queueService;
 
     @Autowired(required = false)
     @org.springframework.context.annotation.Lazy
@@ -81,6 +82,7 @@ public class RecoverySchedulerService {
                                     @Autowired(required = false) RecoveryStrategyRepository recoveryStrategyRepository,
                                     @Autowired(required = false) RecoveryStrategyService recoveryStrategyService,
                                     @Autowired(required = false) RecoveryStrategyProperties recoveryStrategyProperties,
+                                    @Autowired(required = false) RecoveryExecutionQueueService queueService,
                                     List<RecoveryActionExecutor> actionExecutors,
                                     DefaultRecoveryActionExecutor defaultActionExecutor,
                                     AuditService auditService,
@@ -91,10 +93,24 @@ public class RecoverySchedulerService {
         this.recoveryStrategyRepository = recoveryStrategyRepository;
         this.recoveryStrategyService = recoveryStrategyService;
         this.recoveryStrategyProperties = recoveryStrategyProperties != null ? recoveryStrategyProperties : new RecoveryStrategyProperties();
+        this.queueService = queueService;
         this.actionExecutors = actionExecutors;
         this.defaultActionExecutor = defaultActionExecutor;
         this.auditService = auditService;
         this.properties = properties;
+    }
+
+    public RecoverySchedulerService(RecoveryCaseRepository recoveryCaseRepository,
+                                    AgentDecisionRepository agentDecisionRepository,
+                                    RecoveryAttemptRepository recoveryAttemptRepository,
+                                    @Autowired(required = false) RecoveryStrategyRepository recoveryStrategyRepository,
+                                    @Autowired(required = false) RecoveryStrategyService recoveryStrategyService,
+                                    @Autowired(required = false) RecoveryStrategyProperties recoveryStrategyProperties,
+                                    List<RecoveryActionExecutor> actionExecutors,
+                                    DefaultRecoveryActionExecutor defaultActionExecutor,
+                                    AuditService auditService,
+                                    RecoverySchedulerProperties properties) {
+        this(recoveryCaseRepository, agentDecisionRepository, recoveryAttemptRepository, recoveryStrategyRepository, recoveryStrategyService, recoveryStrategyProperties, null, actionExecutors, defaultActionExecutor, auditService, properties);
     }
 
     public RecoverySchedulerService(RecoveryCaseRepository recoveryCaseRepository,
@@ -105,7 +121,7 @@ public class RecoverySchedulerService {
                                     DefaultRecoveryActionExecutor defaultActionExecutor,
                                     AuditService auditService,
                                     RecoverySchedulerProperties properties) {
-        this(recoveryCaseRepository, agentDecisionRepository, recoveryAttemptRepository, null, recoveryStrategyService, new RecoveryStrategyProperties(), actionExecutors, defaultActionExecutor, auditService, properties);
+        this(recoveryCaseRepository, agentDecisionRepository, recoveryAttemptRepository, null, recoveryStrategyService, new RecoveryStrategyProperties(), null, actionExecutors, defaultActionExecutor, auditService, properties);
     }
 
     public RecoverySchedulerService(RecoveryCaseRepository recoveryCaseRepository,
@@ -115,7 +131,7 @@ public class RecoverySchedulerService {
                                     DefaultRecoveryActionExecutor defaultActionExecutor,
                                     AuditService auditService,
                                     RecoverySchedulerProperties properties) {
-        this(recoveryCaseRepository, agentDecisionRepository, recoveryAttemptRepository, null, null, new RecoveryStrategyProperties(), actionExecutors, defaultActionExecutor, auditService, properties);
+        this(recoveryCaseRepository, agentDecisionRepository, recoveryAttemptRepository, null, null, new RecoveryStrategyProperties(), null, actionExecutors, defaultActionExecutor, auditService, properties);
     }
 
     @Transactional
@@ -197,7 +213,7 @@ public class RecoverySchedulerService {
                 .build();
 
         RecoveryAttempt savedAttempt = recoveryAttemptRepository.save(attempt);
-        String attemptIdStr = savedAttempt.getId() != null ? savedAttempt.getId().toString() : "UNKNOWN";
+        String attemptIdStr = savedAttempt != null && savedAttempt.getId() != null ? savedAttempt.getId().toString() : "UNKNOWN";
         log.info("Scheduled RecoveryAttempt id={} for caseId={}, attemptNumber={}, channel={}, scheduledAt={}, strategyId={}",
                 attemptIdStr, recoveryCaseId, nextAttemptNumber, channel, effectiveScheduledAt,
                 strategy != null ? strategy.getId() : "NONE");
@@ -214,6 +230,16 @@ public class RecoverySchedulerService {
                 String.format("Scheduled attempt #%d on channel %s for %s", nextAttemptNumber, channel, effectiveScheduledAt),
                 null
         );
+
+        // Enqueue into asynchronous recovery execution queue
+        if (queueService != null && savedAttempt != null && savedAttempt.getId() != null) {
+            try {
+                queueService.enqueueAttempt(savedAttempt, effectiveScheduledAt);
+            } catch (Exception ex) {
+                log.warn("Failed to enqueue recovery attempt id={} into execution queue: {}",
+                        attemptIdStr, ex.getMessage());
+            }
+        }
 
         return RecoveryAttemptResponseDto.fromEntity(savedAttempt);
     }

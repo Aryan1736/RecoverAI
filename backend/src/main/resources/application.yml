@@ -70,6 +70,14 @@ recoverai:
       enabled: ${RECOVERY_SCHEDULER_ENABLED:true}
       polling-interval-ms: ${RECOVERY_SCHEDULER_POLLING_INTERVAL_MS:5000}
       batch-size: ${RECOVERY_SCHEDULER_BATCH_SIZE:50}
+    queue:
+      enabled: ${RECOVERY_QUEUE_ENABLED:true}
+      poll-interval-ms: ${RECOVERY_QUEUE_POLL_INTERVAL_MS:3000}
+      batch-size: ${RECOVERY_QUEUE_BATCH_SIZE:25}
+      max-retries: ${RECOVERY_QUEUE_MAX_RETRIES:3}
+      retry-delay-seconds: ${RECOVERY_QUEUE_RETRY_DELAY_SECONDS:300}
+      worker-id: ${RECOVERY_QUEUE_WORKER_ID:default-worker}
+      claim-timeout-seconds: ${RECOVERY_QUEUE_CLAIM_TIMEOUT_SECONDS:300}
     strategy:
       enabled: ${RECOVERY_STRATEGY_ENABLED:true}
       execution-enabled: ${RECOVERY_STRATEGY_EXECUTION_ENABLED:true}

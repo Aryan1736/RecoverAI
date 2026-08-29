@@ -1184,6 +1184,121 @@ Strategy execution records structured audit events with `ActorType.SYSTEM`:
 
 ---
 
+## Asynchronous Recovery Execution Queue (PR #14)
+
+### Overview
+RecoverAI introduces a durable, asynchronous recovery execution queue layer that decouples recovery scheduling from actual provider execution. Recovery attempts created by the scheduler or orchestrator are immediately persisted and enqueued into a dedicated database-backed queue table (`recovery_execution_queue`). Distributed background workers poll, claim, and process queue items asynchronously while strictly preserving idempotency, terminal case protection, strategy snapshot authority, retry policies, and multi-tenant security guarantees.
+
+### Architecture & Key Guarantees
+
+```
+                     ┌───────────────────────────────┐
+                     │   RecoverySchedulerService    │
+                     │  (Schedules RecoveryAttempt)  │
+                     └───────────────┬───────────────┘
+                                     │ enqueues attempt
+                                     ▼
+        ┌─────────────────────────────────────────────────────────┐
+        │        recovery_execution_queue (PostgreSQL Table)       │
+        │  • uq_recovery_queue_attempt (One item per attempt)     │
+        │  • status: READY, CLAIMED, PROCESSING, COMPLETED, ...   │
+        └───────┬─────────────────────────┬───────────────────────┘
+                │                         │
+      Worker A  │ atomic claim            │ Worker B (competing)
+   (UPDATE ...  │ (1 row updated)         │ (UPDATE ... -> 0 rows, skips)
+   WHERE status │                         │
+    = 'READY')  ▼                         ▼
+        ┌─────────────────────────┐
+        │  RecoveryExecutionQueue │
+        │         Worker          │
+        └───────────┬─────────────┘
+                    │ 1. Terminal case check (RECOVERED, CANCELLED, EXPIRED) -> Skip provider
+                    │ 2. Strategy snapshot execution (strictly preserves snapshot channel)
+                    │ 3. Transient error backoff / Permanent failure -> DEAD_LETTER
+                    ▼
+        ┌─────────────────────────┐
+        │ RecoveryActionExecutor  │
+        │ (WhatsApp, Email, etc.) │
+        └─────────────────────────┘
+```
+
+1. **Durable Database-Backed Queue**:
+   - Backed by Flyway migration `V11__create_recovery_execution_queue.sql`.
+   - Table `recovery_execution_queue` stores foreign keys to `merchants`, `recovery_attempts`, and `recovery_cases`, alongside scheduling timestamps (`available_at`, `claimed_at`, `started_at`, `completed_at`), `claimed_by`, retry metadata (`retry_count`, `max_retries`), and error diagnostics (`last_error_code`, `last_error_message`).
+
+2. **Distributed Atomic Claiming**:
+   - Supports multi-node horizontal scaling. Competing workers execute a conditional JPQL update:
+     `UPDATE RecoveryExecutionQueueItem q SET q.status = 'CLAIMED', q.claimedAt = :now, q.claimedBy = :workerId WHERE q.id = :id AND q.status = 'READY'`
+   - Exactly one worker claims the record (row count = 1). All other competing workers receive 0 updated rows and immediately skip the item without duplicating execution.
+   - Tested under high contention (10+ parallel worker threads competing for the same item).
+
+3. **Strict Idempotency & Duplicate Protection**:
+   - Database constraint `uq_recovery_queue_attempt UNIQUE (recovery_attempt_id)` prevents duplicate queue items for the same recovery attempt.
+   - Enqueue operations (`enqueueAttempt`) return the existing queue item if already present, handling race conditions gracefully.
+
+4. **Strategy Snapshot Authority**:
+   - The queue worker strictly executes using the persisted `RecoveryStrategySnapshot` attached to the `RecoveryAttempt`.
+   - The worker **never regenerates AI decisions** or recalculates strategies during queue processing.
+
+5. **Terminal Case Protection**:
+   - Before executing recovery actions with external providers, the worker validates the latest case status.
+   - If the case is terminal (`RECOVERED`, `CANCELLED`, `EXPIRED`), execution is skipped, the attempt is marked `SKIPPED` with resultCode `CASE_TERMINAL`, the queue item is marked `COMPLETED`, and audit events are recorded.
+
+6. **Deterministic Retry & Dead-Letter Handling**:
+   - Transient provider failures (network timeouts, rate limits) reschedule the queue item (`status = READY`, `available_at = now + retryDelay`, incremented `retry_count`).
+   - If `retry_count >= max_retries`, or upon encountering permanent business failures (e.g. invalid customer contact), the item transitions directly to `DEAD_LETTER` and the attempt is marked `FAILED`.
+
+7. **Automatic Crash Recovery**:
+   - Periodically scans for abandoned claims (`CLAIMED` or `PROCESSING` past `stale-claim-threshold-seconds`) caused by ungraceful worker crashes or network partitions.
+   - Requeues abandoned items back to `READY` status, resetting claim metadata.
+
+8. **Multi-Tenant Isolation**:
+   - All queue records enforce `merchant_id` foreign keys and column constraints.
+   - Workers verify merchant consistency across queue items, recovery attempts, and recovery cases. Cross-tenant execution is rejected with `TENANT_MISMATCH`.
+
+---
+
+### Queue Item Lifecycle
+
+| Status | Description |
+| :--- | :--- |
+| `READY` | Eligible for execution when `available_at <= NOW()`. |
+| `CLAIMED` | Atomically locked by a specific worker node (`claimed_by`). |
+| `PROCESSING` | Action dispatch in-flight with the recovery channel executor. |
+| `COMPLETED` | Successfully executed or skipped due to terminal case state. |
+| `FAILED` | Terminal execution error. |
+| `DEAD_LETTER` | Max retries exceeded or unrecoverable error requiring operator intervention. |
+
+---
+
+### Configuration Properties
+
+| Property | Environment Variable | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `recoverai.recovery.queue.enabled` | `RECOVERY_QUEUE_ENABLED` | `true` | Enables scheduled asynchronous queue polling. |
+| `recoverai.recovery.queue.poll-interval-ms` | `RECOVERY_QUEUE_POLL_INTERVAL_MS` | `3000` | Polling frequency for due READY items in milliseconds. |
+| `recoverai.recovery.queue.batch-size` | `RECOVERY_QUEUE_BATCH_SIZE` | `25` | Maximum number of items claimed per polling cycle. |
+| `recoverai.recovery.queue.max-retries` | `RECOVERY_QUEUE_MAX_RETRIES` | `3` | Maximum retry attempts before moving an item to DEAD_LETTER. |
+| `recoverai.recovery.queue.retry-delay-seconds` | `RECOVERY_QUEUE_RETRY_DELAY_SECONDS` | `300` | Backoff delay before an item becomes available for retry. |
+| `recoverai.recovery.queue.worker-id` | `RECOVERY_QUEUE_WORKER_ID` | `recoverai-worker-default` | Unique identifier of the worker node claiming queue items. |
+| `recoverai.recovery.queue.stale-claim-threshold-seconds` | `RECOVERY_QUEUE_STALE_CLAIM_THRESHOLD_SECONDS` | `300` | Inactivity threshold before abandoned claims are requeued. |
+
+---
+
+### Audit Logging Events
+
+The asynchronous recovery execution queue records structured audit events with `ActorType.SYSTEM`:
+- `RECOVERY_EXECUTION_QUEUED`: Attempt successfully enqueued into the execution queue.
+- `RECOVERY_EXECUTION_CLAIMED`: Queue item atomically claimed by a worker node.
+- `RECOVERY_EXECUTION_STARTED`: Queue item transitioned to processing.
+- `RECOVERY_EXECUTION_COMPLETED`: Queue item successfully executed to completion.
+- `RECOVERY_EXECUTION_RETRY_SCHEDULED`: Item rescheduled for retry following transient failure.
+- `RECOVERY_EXECUTION_FAILED`: Permanent execution failure encountered.
+- `RECOVERY_EXECUTION_DEAD_LETTERED`: Queue item moved to DEAD_LETTER status after exceeding retries.
+- `RECOVERY_EXECUTION_SKIPPED`: Queue item skipped because recovery case is in a terminal status.
+
+---
+
 ## Current Project Status
 
 - **Implemented Features**:
@@ -1200,6 +1315,8 @@ Strategy execution records structured audit events with `ActorType.SYSTEM`:
   - `feature/recovery-analytics`: Comprehensive Recovery Analytics & Reporting Engine (`GET /api/v1/analytics/overview`, `GET /api/v1/analytics/recovery-trends`, `GET /api/v1/analytics/failures`, `GET /api/v1/analytics/channels`, `GET /api/v1/analytics/attempts`, Flyway V8 analytics indexes, database aggregation projections, ISO date-range validation, and automated multi-tenant test suites).
   - `feature/recovery-strategy-engine`: Deterministic Recovery Strategy Engine (`RecoveryStrategyEngine`, `RecoveryStrategyService`, `RecoveryStrategyController`, `RecoveryStrategyRepository`, Flyway V9 `recovery_strategies` migration, strongly-typed `RecoveryStrategyProperties`, deterministic policy evaluation, confidence thresholding, payment retry guard, channel viability & fallback cascading, max-attempt enforcement, tenant isolation, and audit trails).
   - `feature/strategy-execution-integration`: Strategy-Driven Recovery Execution Integration (Flyway V10 `strategy_snapshot` and `strategy_id` migration, `RecoveryStrategySnapshot` immutable policy snapshot, strategy-aware orchestration & scheduling, delay resolution, atomic worker execution, fallback audit trails, and multi-tenant security guarantees).
+  - `feature/recovery-queue`: Asynchronous Recovery Execution Queue (Flyway V11 `recovery_execution_queue` migration, `RecoveryExecutionQueueItem` entity, distributed atomic claiming, strategy snapshot authority, terminal case protection, retry/dead-letter policy, crash recovery, multi-tenant isolation, and complete automated concurrency test suites).
+
 
 
 

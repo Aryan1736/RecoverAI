@@ -107,6 +107,11 @@ public interface RecoveryExecutionQueueRepository extends JpaRepository<Recovery
             "AND ((q.claimedAt IS NOT NULL AND q.claimedAt <= :staleThreshold) OR (q.startedAt IS NOT NULL AND q.startedAt <= :staleThreshold))")
     List<UUID> findStaleClaimIds(@Param("staleThreshold") Instant staleThreshold);
 
+    @Query("SELECT COUNT(q.id) FROM RecoveryExecutionQueueItem q " +
+            "WHERE (q.status = com.recoverai.backend.entity.enums.RecoveryQueueStatus.CLAIMED OR q.status = com.recoverai.backend.entity.enums.RecoveryQueueStatus.PROCESSING) " +
+            "AND ((q.claimedAt IS NOT NULL AND q.claimedAt <= :staleThreshold) OR (q.startedAt IS NOT NULL AND q.startedAt <= :staleThreshold))")
+    long countStaleClaims(@Param("staleThreshold") Instant staleThreshold);
+
     @Modifying
     @Query("UPDATE RecoveryExecutionQueueItem q SET q.status = com.recoverai.backend.entity.enums.RecoveryQueueStatus.READY, " +
             "q.claimedAt = NULL, q.claimedBy = NULL, q.startedAt = NULL, q.updatedAt = :now " +

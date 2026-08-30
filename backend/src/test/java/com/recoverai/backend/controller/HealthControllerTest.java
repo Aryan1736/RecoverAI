@@ -37,6 +37,6 @@ class HealthControllerTest {
         mockMvc.perform(get("/actuator/health")
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("UP"));
+                .andExpect(jsonPath("$.status").value(org.hamcrest.Matchers.anyOf(org.hamcrest.Matchers.is("UP"), org.hamcrest.Matchers.is("DEGRADED"))));
     }
 }

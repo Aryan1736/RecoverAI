@@ -1,5 +1,6 @@
 package com.recoverai.backend.config;
 
+import com.recoverai.backend.security.CorrelationIdFilter;
 import com.recoverai.backend.security.JwtAccessDeniedHandler;
 import com.recoverai.backend.security.JwtAuthenticationEntryPoint;
 import com.recoverai.backend.security.JwtAuthenticationFilter;
@@ -29,16 +30,19 @@ import java.util.List;
 @EnableMethodSecurity
 public class SecurityConfig {
 
+    private final CorrelationIdFilter correlationIdFilter;
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
     private final JwtAccessDeniedHandler jwtAccessDeniedHandler;
     private final String[] allowedOrigins;
 
     public SecurityConfig(
+            CorrelationIdFilter correlationIdFilter,
             JwtAuthenticationFilter jwtAuthenticationFilter,
             JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint,
             JwtAccessDeniedHandler jwtAccessDeniedHandler,
             @Value("${cors.allowed-origins:http://localhost:5173,http://localhost:3000}") String[] allowedOrigins) {
+        this.correlationIdFilter = correlationIdFilter;
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.jwtAuthenticationEntryPoint = jwtAuthenticationEntryPoint;
         this.jwtAccessDeniedHandler = jwtAccessDeniedHandler;
@@ -63,6 +67,7 @@ public class SecurityConfig {
                         .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated()
                 )
+                .addFilterBefore(correlationIdFilter, org.springframework.security.web.context.SecurityContextHolderFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

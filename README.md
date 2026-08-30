@@ -1711,6 +1711,173 @@ recoverai:
   - `CREATE TABLE notifications`: Central merchant notifications store with indexes on `(merchant_id, status, created_at DESC)` and `(merchant_id, idempotency_key)`.
   - `CREATE TABLE notification_deliveries`: Detailed delivery ledger per channel tracking delivery status, retry count, error codes, and provider message IDs.
 
+---
+
+## PR #19: Production Observability, Actuator Health & MDC Tracing
+
+RecoverAI PR #19 introduces comprehensive production-grade observability, end-to-end distributed correlation tracing, strictly bounded low-cardinality operational metrics, and proactive Actuator operational health indicators.
+
+### 1. MDC Correlation ID & Request Tracing Architecture
+
+Every incoming HTTP request and asynchronous recovery worker cycle is bound to a validated, bounded correlation ID for end-to-end distributed tracing across logs, metrics, and downstream providers.
+
+```
+Incoming Request / Worker Cycle
+           │
+           ▼
+┌──────────────────────────────────────┐
+│       CorrelationIdFilter            │
+│  - Inspects X-Correlation-ID header  │
+│  - Validates: ^[a-zA-Z0-9_-]+$ (<=64) │
+│  - Sanitizes log injection / CRLF    │
+│  - Generates safe UUID if missing    │
+└──────────────────┬───────────────────┘
+                   │
+                   ▼
+┌──────────────────────────────────────┐
+│            SLF4J MDC                 │
+│  correlationId = <safe-id>           │
+│  Response Header: X-Correlation-ID   │
+└──────────────────┬───────────────────┘
+                   │
+                   ▼
+┌──────────────────────────────────────┐
+│  Services, Repositories, Providers   │
+│  - All log lines include [corr-id]   │
+│  - Audits include correlation ID     │
+└──────────────────┬───────────────────┘
+                   │
+                   ▼
+┌──────────────────────────────────────┐
+│          finally { ... }             │
+│  MDC.remove("correlationId")         │
+│  (Strict thread-local isolation)     │
+└──────────────────────────────────────┘
+```
+
+- **HTTP Request Tracing**: Handled by [CorrelationIdFilter](file:///d:/Coding/Projects/RecoverAI/backend/src/main/java/com/recoverai/backend/security/CorrelationIdFilter.java). Registered before `SecurityContextHolderFilter` and `JwtAuthenticationFilter` to ensure all security logging and request processing contains the correlation context.
+- **Log Injection & Security Hardening**: Any attempt to smuggle newlines (`\r`, `\n`), tabs, spaces, SQL injection, or control characters triggers immediate replacement with a safe server-generated UUIDv4.
+- **Asynchronous Worker Context**: The authoritative [RecoveryExecutionQueueWorker](file:///d:/Coding/Projects/RecoverAI/backend/src/main/java/com/recoverai/backend/service/RecoveryExecutionQueueWorker.java) establishes synthetic MDC tracing (`worker-cycle-<UUID>` and `queue-item-<UUID>`) during polling and dispatch, clearing thread context in `finally` blocks.
+
+---
+
+### 2. Micrometer Metrics Catalog
+
+All custom metrics are centrally registered and managed via [RecoveryMetrics](file:///d:/Coding/Projects/RecoverAI/backend/src/main/java/com/recoverai/backend/observability/RecoveryMetrics.java). 
+
+#### Strict Cardinality Guarantees
+> [!IMPORTANT]
+> To prevent Prometheus/Micrometer memory leaks and scrape failures, metric tags are **strictly low-cardinality**. Under no circumstance are high-cardinality identifiers (such as `merchantId`, `paymentId`, `customerId`, `recoveryCaseId`, `recoveryAttemptId`, email addresses, phone numbers, or correlation IDs) used as metric tags.
+
+| Metric Name | Type | Low-Cardinality Tags | Description |
+| :--- | :--- | :--- | :--- |
+| `recoverai.recovery.attempts.started` | Counter | `channel` | Count of recovery attempts transitioning to `IN_FLIGHT`. |
+| `recoverai.recovery.attempts.succeeded` | Counter | `channel` | Count of recovery attempts that completed successfully (`SUCCESS`, `SENT`, `DELIVERED`). |
+| `recoverai.recovery.attempts.failed` | Counter | `channel`, `failureType` | Count of recovery attempts permanently failed or exhausted retries. |
+| `recoverai.recovery.attempts.skipped` | Counter | `channel` | Count of recovery attempts skipped (e.g. case already terminal). |
+| `recoverai.recovery.cases.recovered` | Counter | `channel` | Count of recovery cases successfully recovered to `RECOVERED` state. |
+| `recoverai.recovery.queue.claims` | Counter | _none_ | Total number of queue items claimed by recovery workers. |
+| `recoverai.recovery.queue.retries` | Counter | _none_ | Total number of transient execution failures rescheduled for retry. |
+| `recoverai.recovery.queue.dead_letters` | Counter | `failureType` | Total items moved to `DEAD_LETTER` (retry exhaustion or permanent business error). |
+| `recoverai.recovery.queue.processing_failures` | Counter | _none_ | Total processing exceptions and failure outcomes encountered. |
+| `recoverai.provider.dispatch.success` | Counter | `provider`, `channel` | Successful outbound dispatches to upstream providers. |
+| `recoverai.provider.dispatch.failure` | Counter | `provider`, `channel`, `failureType` | Failed outbound dispatches to upstream providers. |
+| `recoverai.provider.dispatch.retryable_failure` | Counter | `provider`, `channel`, `failureType` | Transient/retryable provider dispatches (network timeout, rate limit). |
+| `recoverai.provider.dispatch.permanent_failure` | Counter | `provider`, `channel`, `failureType` | Permanent provider dispatches (invalid request, bad credentials). |
+| `recoverai.provider.dispatch.duration` | Timer | `provider`, `channel`, `status` | Latency distribution of upstream provider dispatches. |
+| `recoverai.recovery.queue.depth` | Gauge | `status=READY` | Current executable queue backlog depth (cached with a 2s bounded supplier to prevent database scrape storms). |
+
+---
+
+### 3. Actuator Operational Health & Probes
+
+RecoverAI exposes Spring Boot Actuator endpoints for container orchestrators (e.g. Kubernetes) and monitoring systems.
+
+#### Exposed Endpoints
+- `/actuator/health`: Aggregated operational health status and component breakdown.
+- `/actuator/health/liveness`: Kubernetes liveness probe (indicates container is alive).
+- `/actuator/health/readiness`: Kubernetes readiness probe (indicates container is ready to accept traffic).
+- `/actuator/info`: Application metadata and version info.
+- `/actuator/metrics`: Micrometer metrics list and individual metric inspection.
+
+> [!CAUTION]
+> Sensitive management endpoints (`/actuator/env`, `/actuator/beans`, `/actuator/heapdump`, `/actuator/configprops`) are strictly disabled from web exposure to protect production credentials and environment configurations.
+
+#### Custom Health Indicators
+1. **[RecoveryExecutionQueueHealthIndicator](file:///d:/Coding/Projects/RecoverAI/backend/src/main/java/com/recoverai/backend/observability/RecoveryExecutionQueueHealthIndicator.java)**:
+   - Evaluates queue status: `readyItems`, `staleClaims` (claims exceeding `claimTimeoutSeconds`), and `deadLetterItems`.
+   - Transitions from `UP` to `DEGRADED` if queue backlog, stale claim counts, or DLQ size exceed configurable thresholds.
+   - Transitions to `DOWN` with sanitized error details if PostgreSQL is unreachable.
+
+2. **[ProviderHealthIndicator](file:///d:/Coding/Projects/RecoverAI/backend/src/main/java/com/recoverai/backend/observability/ProviderHealthIndicator.java)**:
+   - Reuses existing `ProviderHealthService` to inspect external channels (Email, WhatsApp, SMS, Razorpay).
+   - Read-only diagnostics: never dispatches billable recovery messages or triggers side effects.
+   - Non-blocking: results are cached for a configurable duration (default 10s) to prevent hammering third parties.
+   - Sanitization: eliminates API keys, secrets, and URLs with sensitive query parameters from health output.
+   - Process Liveness Separation: external provider degradation reports `DEGRADED` but does NOT fail Kubernetes process liveness (`/actuator/health/liveness`).
+
+---
+
+### 4. Configuration Properties
+
+All observability settings are governed by `@ConfigurationProperties(prefix = "recoverai.observability")` in [ObservabilityProperties](file:///d:/Coding/Projects/RecoverAI/backend/src/main/java/com/recoverai/backend/config/ObservabilityProperties.java):
+
+```yaml
+recoverai:
+  observability:
+    correlation-id:
+      enabled: true
+      header-name: "X-Correlation-ID"
+      max-length: 64
+    metrics:
+      enabled: true
+    queue-health:
+      enabled: true
+      max-ready-items: 1000
+      max-stale-claims: 10
+      max-dead-letter-items: 50
+    provider-health:
+      enabled: true
+      cache-ttl-seconds: 10
+```
+
+| Property | Default | Description |
+| :--- | :--- | :--- |
+| `recoverai.observability.correlation-id.enabled` | `true` | Enables MDC correlation ID filter and response headers. |
+| `recoverai.observability.correlation-id.header-name` | `X-Correlation-ID` | HTTP header name for distributed tracing. |
+| `recoverai.observability.correlation-id.max-length` | `64` | Maximum allowable length of client-supplied correlation ID. |
+| `recoverai.observability.metrics.enabled` | `true` | Enables Micrometer operational metrics collection. |
+| `recoverai.observability.queue-health.enabled` | `true` | Enables queue backlog and DLQ health monitoring. |
+| `recoverai.observability.queue-health.max-ready-items` | `1000` | Backlog threshold before marking queue health DEGRADED. |
+| `recoverai.observability.queue-health.max-stale-claims` | `10` | Stale claim threshold before marking queue health DEGRADED. |
+| `recoverai.observability.queue-health.max-dead-letter-items` | `50` | Dead-letter threshold before marking queue health DEGRADED. |
+| `recoverai.observability.provider-health.enabled` | `true` | Enables external provider health indicator. |
+| `recoverai.observability.provider-health.cache-ttl-seconds` | `10` | Cache time-to-live for external provider health checks. |
+
+---
+
+### 5. Production Troubleshooting Guide
+
+#### Tracing a Failed Transaction End-to-End
+1. Inspect the response header or client log for `X-Correlation-ID` (e.g. `c74b12df-78b1-4bb2-b5e1-0db35a11c13d`).
+2. Filter central logging (Grafana Loki, Elasticsearch, CloudWatch) by `correlationId`:
+   ```bash
+   grep "c74b12df-78b1-4bb2-b5e1-0db35a11c13d" /var/log/recoverai/backend.log
+   ```
+3. Correlate with audit trail entries via `auditService.recordEvent(...)` which links worker identity, attempt ID, and reason codes.
+
+#### Diagnosing Queue Backlog & Worker Stalls
+- Check `/actuator/metrics/recoverai.recovery.queue.depth`:
+  If queue depth is growing and `recoverai.recovery.queue.claims` is flat, verify `RecoveryExecutionQueueWorker` is active (`recoverai.recovery.queue.enabled=true`) and database connections in HikariCP are healthy (`/actuator/metrics/hikaricp.connections.active`).
+- Check `/actuator/health` under `components.recoveryExecutionQueue`:
+  Review `staleClaims` count. If stale claims > 0, worker pods may have crashed mid-execution. Recovery workers will automatically reclaim stale claims once `claimTimeoutSeconds` expires.
+
+#### Diagnosing External Provider Outages
+- Query `/actuator/health` under `components.provider`:
+  - `UP`: All configured adapters are healthy and responsive.
+  - `DEGRADED`: Specific provider rate limits or high latency observed; review `messages` breakdown for failure classification (`RATE_LIMITED`, `TIMEOUT`).
+  - Fallback channels automatically route retry links through resilient alternative communication paths.
+
 
 
 

@@ -30,6 +30,17 @@ management:
   endpoint:
     health:
       show-details: always
+      probes:
+        enabled: true
+    info:
+      enabled: true
+    metrics:
+      enabled: true
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
 
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}
@@ -119,6 +130,22 @@ recoverai:
       secret: ${JWT_SECRET:recoverai-secure-jwt-signing-secret-key-must-be-at-least-256-bits-long}
       expiration-ms: ${JWT_EXPIRATION_MS:86400000}
       issuer: ${JWT_ISSUER:RecoverAI}
+  observability:
+    enabled: ${OBSERVABILITY_ENABLED:true}
+    correlation-id:
+      enabled: ${OBSERVABILITY_CORRELATION_ID_ENABLED:true}
+      header-name: ${OBSERVABILITY_CORRELATION_ID_HEADER:X-Correlation-ID}
+      max-length: ${OBSERVABILITY_CORRELATION_ID_MAX_LENGTH:64}
+    metrics:
+      enabled: ${OBSERVABILITY_METRICS_ENABLED:true}
+    queue-health:
+      enabled: ${OBSERVABILITY_QUEUE_HEALTH_ENABLED:true}
+      max-dead-letter-items: ${OBSERVABILITY_QUEUE_HEALTH_MAX_DLQ:50}
+      max-stale-claims: ${OBSERVABILITY_QUEUE_HEALTH_MAX_STALE:10}
+      max-ready-items: ${OBSERVABILITY_QUEUE_HEALTH_MAX_READY:1000}
+    provider-health:
+      enabled: ${OBSERVABILITY_PROVIDER_HEALTH_ENABLED:true}
+      cache-ttl-seconds: ${OBSERVABILITY_PROVIDER_HEALTH_CACHE_TTL:10}
 
 
 

@@ -177,10 +177,10 @@ export function AnalyticsPage() {
       />
 
       {/* Date Range Control Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-slate-900/60 border border-slate-800/80">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs">
         <div>
-          <div className="text-xs font-semibold text-white">Reporting Window</div>
-          <div className="text-[11px] text-slate-400">
+          <div className="text-xs font-semibold text-slate-900">Reporting Window</div>
+          <div className="text-[11px] text-slate-500">
             {dateRange.from && dateRange.to ? `${dateRange.from} to ${dateRange.to}` : 'All time'}
           </div>
         </div>
@@ -200,88 +200,100 @@ export function AnalyticsPage() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
           {/* Card 1: Total Recovery Cases */}
-          <Card className="hover:border-slate-700 transition">
-            <div className="flex items-center justify-between text-slate-400 pb-2">
+          <Card className="hover:border-slate-300 transition-colors shadow-2xs">
+            <div className="flex items-center justify-between text-slate-500 pb-2">
               <span className="text-[11px] font-semibold uppercase tracking-wider">Total Cases</span>
-              <ShieldAlert className="w-4 h-4 text-indigo-400" />
+              <div className="p-1 rounded-md bg-slate-100 text-slate-700">
+                <ShieldAlert className="w-3.5 h-3.5" />
+              </div>
             </div>
             <div className="space-y-1">
-              <div className="text-xl font-bold text-white font-mono">{overview?.totalCases ?? 0}</div>
-              <p className="text-[10px] text-slate-400">
+              <div className="text-xl font-bold text-slate-900 font-mono">{overview?.totalCases ?? 0}</div>
+              <p className="text-[10px] text-slate-500">
                 {overview?.openCases ?? 0} open • {overview?.inProgressCases ?? 0} in flight
               </p>
             </div>
           </Card>
 
           {/* Card 2: Recovered Cases */}
-          <Card className="hover:border-slate-700 transition">
-            <div className="flex items-center justify-between text-slate-400 pb-2">
+          <Card className="hover:border-slate-300 transition-colors shadow-2xs">
+            <div className="flex items-center justify-between text-slate-500 pb-2">
               <span className="text-[11px] font-semibold uppercase tracking-wider">Recovered</span>
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <div className="p-1 rounded-md bg-emerald-50 text-emerald-600">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+              </div>
             </div>
             <div className="space-y-1">
-              <div className="text-xl font-bold text-emerald-400 font-mono">
+              <div className="text-xl font-bold text-emerald-700 font-mono">
                 {overview?.recoveredCases ?? 0}
               </div>
-              <p className="text-[10px] text-slate-400">Closed-loop successes</p>
+              <p className="text-[10px] text-slate-500">Closed-loop successes</p>
             </div>
           </Card>
 
           {/* Card 3: Recovery Rate */}
-          <Card className="hover:border-slate-700 transition">
-            <div className="flex items-center justify-between text-slate-400 pb-2">
+          <Card className="hover:border-slate-300 transition-colors shadow-2xs">
+            <div className="flex items-center justify-between text-slate-500 pb-2">
               <span className="text-[11px] font-semibold uppercase tracking-wider">Recovery Rate</span>
-              <TrendingUp className="w-4 h-4 text-indigo-400" />
+              <div className="p-1 rounded-md bg-emerald-50 text-emerald-600">
+                <TrendingUp className="w-3.5 h-3.5" />
+              </div>
             </div>
             <div className="space-y-1">
-              <div className="text-xl font-bold text-white font-mono">
+              <div className="text-xl font-bold text-slate-900 font-mono">
                 {overview?.recoveryRate ? `${Number(overview.recoveryRate).toFixed(1)}%` : '0.0%'}
               </div>
-              <p className="text-[10px] text-slate-400">Resolution efficiency</p>
+              <p className="text-[10px] text-slate-500">Resolution efficiency</p>
             </div>
           </Card>
 
           {/* Card 4: Total Recovered Amount */}
-          <Card className="hover:border-slate-700 transition">
-            <div className="flex items-center justify-between text-slate-400 pb-2">
+          <Card className="hover:border-slate-300 transition-colors shadow-2xs">
+            <div className="flex items-center justify-between text-slate-500 pb-2">
               <span className="text-[11px] font-semibold uppercase tracking-wider">Recovered Revenue</span>
-              <Zap className="w-4 h-4 text-emerald-400" />
+              <div className="p-1 rounded-md bg-emerald-50 text-emerald-600">
+                <Zap className="w-3.5 h-3.5" />
+              </div>
             </div>
             <div className="space-y-1">
-              <div className="text-xl font-bold text-emerald-400 font-mono truncate">
+              <div className="text-xl font-bold text-emerald-700 font-mono truncate">
                 {formatCurrency(overview?.totalRecoveredAmount)}
               </div>
-              <p className="text-[10px] text-slate-400 truncate">
+              <p className="text-[10px] text-slate-500 truncate">
                 Of {formatCurrency(overview?.totalEstimatedRecoverableAmount)} at risk
               </p>
             </div>
           </Card>
 
           {/* Card 5: Average Recovered Amount */}
-          <Card className="hover:border-slate-700 transition">
-            <div className="flex items-center justify-between text-slate-400 pb-2">
+          <Card className="hover:border-slate-300 transition-colors shadow-2xs">
+            <div className="flex items-center justify-between text-slate-500 pb-2">
               <span className="text-[11px] font-semibold uppercase tracking-wider">Avg Recovery</span>
-              <TrendingUp className="w-4 h-4 text-slate-400" />
+              <div className="p-1 rounded-md bg-slate-100 text-slate-700">
+                <TrendingUp className="w-3.5 h-3.5" />
+              </div>
             </div>
             <div className="space-y-1">
-              <div className="text-xl font-bold text-white font-mono truncate">
+              <div className="text-xl font-bold text-slate-900 font-mono truncate">
                 {formatCurrency(overview?.averageRecoveredAmount)}
               </div>
-              <p className="text-[10px] text-slate-400">Per recovered transaction</p>
+              <p className="text-[10px] text-slate-500">Per recovered transaction</p>
             </div>
           </Card>
 
           {/* Card 6: Average Recovery Time */}
-          <Card className="hover:border-slate-700 transition">
-            <div className="flex items-center justify-between text-slate-400 pb-2">
+          <Card className="hover:border-slate-300 transition-colors shadow-2xs">
+            <div className="flex items-center justify-between text-slate-500 pb-2">
               <span className="text-[11px] font-semibold uppercase tracking-wider">Avg Duration</span>
-              <Clock className="w-4 h-4 text-amber-400" />
+              <div className="p-1 rounded-md bg-amber-50 text-amber-600">
+                <Clock className="w-3.5 h-3.5" />
+              </div>
             </div>
             <div className="space-y-1">
-              <div className="text-xl font-bold text-white font-mono">
+              <div className="text-xl font-bold text-slate-900 font-mono">
                 {formatDuration(overview?.averageTimeToRecoverySeconds)}
               </div>
-              <p className="text-[10px] text-slate-400">Time to payment reconciliation</p>
+              <p className="text-[10px] text-slate-500">Time to payment reconciliation</p>
             </div>
           </Card>
         </div>

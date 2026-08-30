@@ -43,26 +43,26 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           <div
             key={item.id}
             role="status"
-            className={`pointer-events-auto flex items-start gap-3 p-4 rounded-xl border shadow-lg backdrop-blur-md transition-all duration-200 animate-in fade-in slide-in-from-bottom-2 ${
+            className={`pointer-events-auto flex items-start gap-3 p-4 rounded-xl border bg-white shadow-lg transition-all duration-200 animate-in fade-in slide-in-from-bottom-2 ${
               item.type === 'success'
-                ? 'bg-emerald-950/90 border-emerald-500/30 text-emerald-100'
+                ? 'border-emerald-200 text-slate-800'
                 : item.type === 'error'
-                ? 'bg-rose-950/90 border-rose-500/30 text-rose-100'
+                ? 'border-rose-200 text-slate-800'
                 : item.type === 'warning'
-                ? 'bg-amber-950/90 border-amber-500/30 text-amber-100'
-                : 'bg-slate-900/90 border-slate-700/50 text-slate-100'
+                ? 'border-amber-200 text-slate-800'
+                : 'border-slate-200 text-slate-800'
             }`}
           >
             <div className="shrink-0 mt-0.5">
-              {item.type === 'success' && <CheckCircle2 className="w-5 h-5 text-emerald-400" />}
-              {item.type === 'error' && <AlertCircle className="w-5 h-5 text-rose-400" />}
-              {item.type === 'warning' && <AlertTriangle className="w-5 h-5 text-amber-400" />}
-              {item.type === 'info' && <Info className="w-5 h-5 text-indigo-400" />}
+              {item.type === 'success' && <CheckCircle2 className="w-5 h-5 text-emerald-600" />}
+              {item.type === 'error' && <AlertCircle className="w-5 h-5 text-rose-600" />}
+              {item.type === 'warning' && <AlertTriangle className="w-5 h-5 text-amber-600" />}
+              {item.type === 'info' && <Info className="w-5 h-5 text-blue-600" />}
             </div>
             <div className="flex-1 text-sm font-medium leading-snug">{item.message}</div>
             <button
               onClick={() => dismissToast(item.id)}
-              className="shrink-0 text-slate-400 hover:text-white transition p-0.5 rounded cursor-pointer"
+              className="shrink-0 text-slate-400 hover:text-slate-600 transition p-0.5 rounded cursor-pointer"
               aria-label="Dismiss notification"
             >
               <X className="w-4 h-4" />

@@ -16,14 +16,14 @@ export function ErrorState({
 }: ErrorStateProps) {
   return (
     <div
-      className={`p-6 sm:p-8 text-center rounded-xl border border-rose-500/20 bg-rose-950/20 max-w-lg mx-auto flex flex-col items-center justify-center space-y-4 ${className}`}
+      className={`p-6 sm:p-8 text-center rounded-xl border border-rose-200 bg-rose-50/50 max-w-lg mx-auto flex flex-col items-center justify-center space-y-4 shadow-2xs ${className}`}
     >
-      <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400">
+      <div className="p-3 rounded-xl bg-rose-100 border border-rose-200 text-rose-600">
         <AlertTriangle className="w-6 h-6" aria-hidden="true" />
       </div>
       <div className="space-y-1 max-w-sm">
-        <h4 className="text-sm font-semibold text-white tracking-tight">{title}</h4>
-        <p className="text-xs text-rose-300/80 leading-relaxed">{message}</p>
+        <h4 className="text-sm font-semibold text-slate-900 tracking-tight">{title}</h4>
+        <p className="text-xs text-rose-700 leading-relaxed">{message}</p>
       </div>
       {onRetry && (
         <Button

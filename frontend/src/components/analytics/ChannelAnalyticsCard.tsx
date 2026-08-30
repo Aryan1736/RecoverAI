@@ -37,15 +37,15 @@ export function ChannelAnalyticsCard({
 
   if (isLoading) {
     return (
-      <Card>
+      <Card className="shadow-2xs">
         <CardHeader>
-          <div className="h-5 w-44 bg-slate-800 rounded animate-pulse" />
-          <div className="h-3 w-60 bg-slate-800/60 rounded animate-pulse mt-1" />
+          <div className="h-5 w-44 bg-slate-100 rounded animate-pulse" />
+          <div className="h-3 w-60 bg-slate-100 rounded animate-pulse mt-1" />
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-16 w-full bg-slate-900/60 rounded-xl animate-pulse" />
+              <div key={i} className="h-16 w-full bg-slate-50 rounded-xl animate-pulse" />
             ))}
           </div>
         </CardContent>
@@ -55,14 +55,14 @@ export function ChannelAnalyticsCard({
 
   if (!channels || channels.length === 0) {
     return (
-      <Card>
+      <Card className="shadow-2xs">
         <CardHeader>
           <CardTitle>Recovery Channels</CardTitle>
-          <CardDescription>Multi-channel orchestration engagement & conversion metrics</CardDescription>
+          <CardDescription>Multi-channel orchestration engagement &amp; conversion metrics</CardDescription>
         </CardHeader>
         <CardContent>
           <EmptyState
-            icon={<Radio className="w-8 h-8 text-indigo-400" />}
+            icon={<Radio className="w-8 h-8 text-emerald-600" />}
             title="No Channel Activity"
             description="No recovery dispatches have occurred over the selected date range."
           />
@@ -72,7 +72,7 @@ export function ChannelAnalyticsCard({
   }
 
   return (
-    <Card>
+    <Card className="shadow-2xs">
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
@@ -89,7 +89,7 @@ export function ChannelAnalyticsCard({
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="border-b border-slate-800 text-slate-400 uppercase tracking-wider font-semibold">
+              <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 uppercase tracking-wider font-semibold">
                 <th className="py-2.5 px-3">Channel</th>
                 <th className="py-2.5 px-3 text-right">Attempts</th>
                 <th className="py-2.5 px-3 text-right">Delivered / Clicked</th>
@@ -97,7 +97,7 @@ export function ChannelAnalyticsCard({
                 <th className="py-2.5 px-3 text-right">Revenue Recovered</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/70">
+            <tbody className="divide-y divide-slate-100">
               {channels.map((metric) => {
                 const conf = channelConfig[metric.channel] || {
                   label: metric.channel,
@@ -108,44 +108,44 @@ export function ChannelAnalyticsCard({
                 const rate = Number(metric.successRate || 0);
 
                 return (
-                  <tr key={metric.channel} className="hover:bg-slate-900/50 transition">
+                  <tr key={metric.channel} className="hover:bg-slate-50/80 transition-colors">
                     <td className="py-3 px-3">
                       <div className="flex items-center gap-2.5">
-                        <div className="p-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-300">
-                          <Icon className="w-4 h-4 text-indigo-400" />
+                        <div className="p-1.5 rounded-lg bg-slate-50 border border-slate-200 text-slate-700">
+                          <Icon className="w-4 h-4 text-emerald-600" />
                         </div>
                         <div>
-                          <div className="font-medium text-slate-200">{conf.label}</div>
+                          <div className="font-semibold text-slate-900">{conf.label}</div>
                           <div className="text-[10px] text-slate-400 font-mono">{metric.channel}</div>
                         </div>
                       </div>
                     </td>
 
-                    <td className="py-3 px-3 text-right font-mono text-slate-200">
-                      <div>{metric.totalAttempts}</div>
-                      <div className="text-[10px] text-emerald-400">
-                        {metric.successfulAttempts} successful / {metric.failedAttempts} failed
+                    <td className="py-3 px-3 text-right font-mono text-slate-800">
+                      <div className="font-semibold">{metric.totalAttempts}</div>
+                      <div className="text-[10px] text-slate-500">
+                        {metric.successfulAttempts} ok / {metric.failedAttempts} err
                       </div>
                     </td>
 
-                    <td className="py-3 px-3 text-right font-mono text-slate-300">
+                    <td className="py-3 px-3 text-right font-mono text-slate-600">
                       <div>{metric.deliveredAttempts} delivered</div>
                       <div className="text-[10px] text-slate-400">{metric.clickedAttempts} clicked</div>
                     </td>
 
                     <td className="py-3 px-3 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <div className="w-16 bg-slate-800 h-1.5 rounded-full overflow-hidden hidden sm:block">
+                        <div className="w-16 bg-slate-100 h-1.5 rounded-full overflow-hidden hidden sm:block">
                           <div
-                            className="bg-emerald-500 h-full rounded-full"
+                            className="bg-emerald-600 h-full rounded-full"
                             style={{ width: `${Math.min(100, Math.max(0, rate))}%` }}
                           />
                         </div>
-                        <span className="font-mono font-semibold text-slate-200">{rate.toFixed(1)}%</span>
+                        <span className="font-mono font-semibold text-slate-900">{rate.toFixed(1)}%</span>
                       </div>
                     </td>
 
-                    <td className="py-3 px-3 text-right font-mono font-semibold text-emerald-400">
+                    <td className="py-3 px-3 text-right font-mono font-bold text-emerald-700">
                       {formatCurrency(Number(metric.recoveredAmount || 0))}
                     </td>
                   </tr>

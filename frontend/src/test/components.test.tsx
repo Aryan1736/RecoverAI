@@ -41,7 +41,7 @@ describe('Design System UI Components', () => {
       expect(screen.getByRole('button')).toHaveClass('bg-rose-600');
 
       rerender(<Button variant="secondary">Secondary</Button>);
-      expect(screen.getByRole('button')).toHaveClass('bg-slate-800');
+      expect(screen.getByRole('button')).toHaveClass('bg-white');
     });
   });
 

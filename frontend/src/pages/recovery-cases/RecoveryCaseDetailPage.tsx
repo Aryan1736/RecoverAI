@@ -2,13 +2,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   ArrowLeft,
-  ShieldAlert,
   CreditCard,
   User,
   Cpu,
   RefreshCw,
   Ban,
-  Clock,
   Sparkles,
   Layers,
   CheckCircle2,
@@ -98,109 +96,42 @@ export function RecoveryCaseDetailPage() {
     if (!id) return;
     setIsCancelling(true);
     try {
-      if (isDemoMode) {
-        toast.info('Simulated in Demo Mode: case cancellation is simulated and not persisted.');
-        setCancelModalOpen(false);
-        if (caseDetail) {
-          setCaseDetail({ ...caseDetail, status: 'CANCELLED' });
-        }
-        return;
-      }
-      await cancelRecoveryCase(id);
-      toast.success('Recovery case was successfully cancelled');
+      const updated = await cancelRecoveryCase(id);
+      toast.success('Recovery case was successfully cancelled.');
       setCancelModalOpen(false);
-      await fetchCaseDetail();
+      setCaseDetail((prev) => (prev ? { ...prev, status: updated.status } : null));
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to cancel recovery case';
-      toast.error(message);
+      const msg = err instanceof Error ? err.message : 'Failed to cancel recovery case';
+      toast.error(msg);
     } finally {
       setIsCancelling(false);
     }
   };
 
-  // Check if case is cancellable per backend domain rules (OPEN, IN_PROGRESS, FAILED)
-  const isCancellable =
-    caseDetail &&
-    (caseDetail.status === 'OPEN' ||
-      caseDetail.status === 'IN_PROGRESS' ||
-      caseDetail.status === 'FAILED');
-
-  // Check if case is eligible for interactive customer recovery simulation
-  const isSimulatable =
-    isDemoMode &&
-    caseDetail &&
-    (caseDetail.status === 'OPEN' || caseDetail.status === 'IN_PROGRESS');
-
-  const simulationSteps = [
-    {
-      step: 1,
-      title: 'Customer accessed recovery link',
-      desc: 'Simulated customer opened recovery link delivered via channel',
-    },
-    {
-      step: 2,
-      title: 'Payment method selected',
-      desc: 'Customer chose alternative payment instrument (UPI / Netbanking)',
-    },
-    {
-      step: 3,
-      title: 'Gateway authorized & captured payment',
-      desc: 'Razorpay simulated payment capture event confirmed',
-    },
-    {
-      step: 4,
-      title: 'Case resolved to RECOVERED',
-      desc: 'Central demo state updated and PAYMENT_RECOVERED notification generated',
-    },
-  ];
-
-  const handleSimulateRecovery = async () => {
-    if (!id || !caseDetail) return;
-    if (!isSimulatable) {
-      toast.warning(
-        `Simulation unavailable: Case ${caseDetail.id} is in terminal status "${caseDetail.status}".`
-      );
-      return;
-    }
-
+  const handleExecuteSimulation = async () => {
+    if (!id) return;
     setIsSimulating(true);
-    setSimulationStep(1);
-
-    const stepDelay = import.meta.env?.MODE === 'test' ? 10 : 300;
-
     try {
-      await new Promise((r) => setTimeout(r, stepDelay));
-      setSimulationStep(2);
-      await new Promise((r) => setTimeout(r, stepDelay));
-      setSimulationStep(3);
-      await new Promise((r) => setTimeout(r, stepDelay));
-      setSimulationStep(4);
-      await new Promise((r) => setTimeout(r, stepDelay));
-
       const updated = await simulateDemoRecovery(id);
       setCaseDetail(updated);
-      toast.success(
-        `Customer Recovery simulated successfully! Transaction captured and ${formatCurrency(
-          updated.recoveredAmount,
-          updated.currency
-        )} recovered.`
-      );
+      toast.success('Simulation complete: Payment captured and case recovered!');
       setSimulateModalOpen(false);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Simulation failed';
-      toast.error(message);
+      const msg = err instanceof Error ? err.message : 'Simulation failed';
+      toast.error(msg);
+      setSimulateModalOpen(false);
     } finally {
       setIsSimulating(false);
       setSimulationStep(0);
     }
   };
 
-  const formatCurrency = (val: number | undefined, currency?: string) => {
+  const formatCurrency = (amount: number | null | undefined, currency?: string) => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
       currency: currency || 'INR',
       maximumFractionDigits: 2,
-    }).format(val || 0);
+    }).format(amount || 0);
   };
 
   const formatDateTime = (dateStr: string | null | undefined) => {
@@ -253,10 +184,11 @@ export function RecoveryCaseDetailPage() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <div className="h-8 w-60 bg-slate-800 rounded animate-pulse" />
+        <div className="h-6 w-32 bg-slate-200 rounded animate-pulse" />
+        <div className="h-20 w-full bg-white border border-slate-200 rounded-xl animate-pulse" />
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="h-64 bg-slate-900/60 rounded-xl animate-pulse lg:col-span-2" />
-          <div className="h-64 bg-slate-900/60 rounded-xl animate-pulse" />
+          <div className="lg:col-span-2 h-96 bg-white border border-slate-200 rounded-xl animate-pulse" />
+          <div className="h-96 bg-white border border-slate-200 rounded-xl animate-pulse" />
         </div>
       </div>
     );
@@ -265,48 +197,59 @@ export function RecoveryCaseDetailPage() {
   if (error || !caseDetail) {
     return (
       <div className="space-y-6">
-        <Link to="/recovery-cases" className="inline-flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300">
-          <ArrowLeft className="w-3.5 h-3.5" /> Back to Recovery Cases
+        <Link
+          to="/recovery-cases"
+          className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-900 transition"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          <span>Back to Cases</span>
         </Link>
         <ErrorState
           title="Recovery Case Not Found"
-          message={error || 'Unable to retrieve case details'}
+          message={error || 'The requested recovery case could not be retrieved.'}
           onRetry={fetchCaseDetail}
         />
       </div>
     );
   }
 
-  // Extract strategy from attempts or diagnosis if present
-  const latestAttempt = caseDetail.attempts && caseDetail.attempts.length > 0
-    ? caseDetail.attempts[caseDetail.attempts.length - 1]
-    : null;
-  const strategySnapshot = latestAttempt?.strategySnapshot;
+  const isCancellable = caseDetail.status === 'OPEN' || caseDetail.status === 'IN_PROGRESS';
+  const isSimulatable = caseDetail.status === 'OPEN' || caseDetail.status === 'IN_PROGRESS';
 
   return (
     <div className="space-y-6">
-      {/* Top Breadcrumb & Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="space-y-2">
-          <Link
-            to="/recovery-cases"
-            className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-indigo-300 transition"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            Back to Recovery Cases
-          </Link>
+      {/* Top Navigation */}
+      <div className="flex items-center justify-between">
+        <Link
+          to="/recovery-cases"
+          className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-900 font-medium transition"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          <span>Back to Recovery Cases</span>
+        </Link>
+      </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-xl font-bold text-white font-mono flex items-center gap-2">
-              <span className="text-slate-400 font-sans text-sm font-normal">Case:</span>
+      {/* Case Header Banner */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="space-y-1.5">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="text-xl font-bold text-slate-900 font-mono flex items-center gap-2">
+              <span className="text-slate-500 font-sans text-sm font-normal">Case:</span>
               {caseDetail.id}
             </h1>
             {getStatusBadge(caseDetail.status)}
             {getPriorityBadge(caseDetail.priority)}
           </div>
+          <div className="flex items-center gap-3 text-xs text-slate-500">
+            <span>Created {formatDateTime(caseDetail.createdAt)}</span>
+            <span>•</span>
+            <span className="font-semibold text-slate-900 font-mono">
+              {formatCurrency(caseDetail.estimatedRecoverableAmount, caseDetail.currency)}
+            </span>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 flex-wrap">
           <Button
             variant="outline"
             size="sm"
@@ -338,7 +281,7 @@ export function RecoveryCaseDetailPage() {
               disabled
               title="Recovery simulation unavailable for terminal cases"
               className="opacity-60 cursor-not-allowed text-slate-400"
-              leftIcon={<Sparkles className="w-3.5 h-3.5 opacity-40 text-slate-500" />}
+              leftIcon={<Sparkles className="w-3.5 h-3.5 opacity-40 text-slate-400" />}
               data-testid="simulate-recovery-disabled-btn"
             >
               Simulation Unavailable ({caseDetail.status})
@@ -363,13 +306,13 @@ export function RecoveryCaseDetailPage() {
         <div
           role="status"
           aria-label="Interactive Demo Simulation Status"
-          className="p-4 rounded-xl bg-gradient-to-r from-indigo-950/40 via-purple-950/20 to-slate-900 border border-indigo-500/30 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm"
+          className="p-4 rounded-xl bg-emerald-50/70 border border-emerald-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs"
         >
           <div className="flex items-start sm:items-center gap-2.5">
-            <Sparkles className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5 sm:mt-0" />
+            <Sparkles className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5 sm:mt-0" />
             <div>
-              <span className="font-semibold text-white">Interactive Recovery Simulator:</span>{' '}
-              <span className="text-slate-300">
+              <span className="font-semibold text-slate-900">Interactive Recovery Simulator:</span>{' '}
+              <span className="text-slate-600">
                 {isSimulatable
                   ? `Case is ${caseDetail.status}. Simulate customer accessing recovery link and completing checkout to verify closed-loop reconciliation.`
                   : `Simulation is disabled because case is in terminal status "${caseDetail.status}". Terminal cases cannot be re-recovered.`}
@@ -427,16 +370,16 @@ export function RecoveryCaseDetailPage() {
           </>
         }
       >
-        <div className="space-y-3 text-xs text-slate-300">
+        <div className="space-y-3 text-xs text-slate-600">
           <p>
             Cancelling this case will immediately halt all pending and future recovery attempts for transaction{' '}
-            <span className="font-mono text-white font-semibold">
+            <span className="font-mono text-slate-900 font-semibold">
               {caseDetail.payment?.razorpayPaymentId || caseDetail.id}
             </span>.
           </p>
-          <p className="text-slate-400">
+          <p className="text-slate-500">
             Any currently scheduled communications (WhatsApp, Email, SMS) will be marked as{' '}
-            <code className="text-amber-300 font-mono">SKIPPED</code> and will not be dispatched.
+            <code className="text-amber-800 bg-amber-50 px-1 py-0.5 rounded border border-amber-200 font-mono">SKIPPED</code> and will not be dispatched.
           </p>
         </div>
       </Modal>
@@ -448,425 +391,355 @@ export function RecoveryCaseDetailPage() {
           if (!isSimulating) setSimulateModalOpen(false);
         }}
         title="Simulate Customer Recovery"
-        description="Experience the end-to-end automated payment recovery journey in sandbox mode."
+        description="Simulates the end-to-end recovery journey as experienced by the payer."
         footer={
-          <>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setSimulateModalOpen(false)}
-              disabled={isSimulating}
-            >
-              Cancel
-            </Button>
+          simulationStep === 3 ? (
             <Button
               variant="primary"
               size="sm"
-              onClick={handleSimulateRecovery}
-              isLoading={isSimulating}
-              leftIcon={<Sparkles className="w-3.5 h-3.5" />}
-              data-testid="confirm-simulation-btn"
+              onClick={() => setSimulateModalOpen(false)}
+              data-testid="simulation-done-btn"
             >
-              {isSimulating ? 'Simulating Recovery...' : 'Confirm & Simulate Recovery'}
+              Close &amp; Review Case
             </Button>
-          </>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSimulateModalOpen(false)}
+                disabled={isSimulating}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleExecuteSimulation}
+                isLoading={isSimulating}
+                disabled={simulationStep > 0}
+                leftIcon={<PlayCircle className="w-3.5 h-3.5" />}
+                data-testid="confirm-simulation-btn"
+              >
+                {simulationStep === 0 ? 'Confirm & Simulate' : 'Simulating...'}
+              </Button>
+            </div>
+          )
         }
       >
-        <div className="space-y-4 text-xs text-slate-300">
-          <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 space-y-1.5">
-            <div className="flex items-center justify-between text-[11px]">
-              <span className="text-slate-400">Target Case:</span>
-              <span className="font-mono text-white font-semibold">{caseDetail.id}</span>
-            </div>
-            <div className="flex items-center justify-between text-[11px]">
-              <span className="text-slate-400">Customer:</span>
-              <span className="text-slate-200">{caseDetail.customer?.name || 'Customer'}</span>
-            </div>
-            <div className="flex items-center justify-between text-[11px]">
-              <span className="text-slate-400">Recoverable Amount:</span>
-              <span className="font-mono font-bold text-emerald-400">
-                {formatCurrency(caseDetail.estimatedRecoverableAmount, caseDetail.currency)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between text-[11px]">
-              <span className="text-slate-400">Prescribed Channel:</span>
-              <span className="font-mono text-indigo-300 font-semibold">
-                {strategySnapshot?.channel || caseDetail.latestDiagnosis?.channel || 'WHATSAPP'}
-              </span>
-            </div>
+        <div className="space-y-4 text-xs text-slate-600">
+          <div className="flex items-center gap-2 text-slate-700">
+            <span className="font-semibold">Target Case:</span>
+            <span className="font-mono text-slate-900 font-bold">{caseDetail.id}</span>
           </div>
 
-          <div className="space-y-2">
-            <span className="font-semibold text-slate-200 uppercase tracking-wider text-[10px] block">
-              Simulation Progression Stages:
-            </span>
-            <div className="space-y-2">
-              {simulationSteps.map((s) => {
-                const isCurrent = simulationStep === s.step;
-                const isPassed = simulationStep > s.step;
+          <p>
+            This demo simulation fires a synthetic recovery event for{' '}
+            <span className="font-semibold text-slate-900 font-mono">
+              {formatCurrency(caseDetail.estimatedRecoverableAmount, caseDetail.currency)}
+            </span>. It simulates:
+          </p>
 
-                return (
-                  <div
-                    key={s.step}
-                    className={`p-2.5 rounded-lg border transition flex items-start gap-2.5 ${
-                      isCurrent
-                        ? 'bg-indigo-950/40 border-indigo-500/50 text-indigo-200'
-                        : isPassed
-                        ? 'bg-emerald-950/20 border-emerald-500/30 text-emerald-300'
-                        : 'bg-slate-950/40 border-slate-800/80 text-slate-400'
-                    }`}
-                  >
-                    <div className="mt-0.5 shrink-0">
-                      {isPassed ? (
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                      ) : isCurrent ? (
-                        <RefreshCw className="w-3.5 h-3.5 text-indigo-400 animate-spin" />
-                      ) : (
-                        <span className="w-3.5 h-3.5 rounded-full border border-slate-600 flex items-center justify-center text-[9px] font-mono">
-                          {s.step}
-                        </span>
-                      )}
-                    </div>
-                    <div className="space-y-0.5 flex-1">
-                      <div className="font-medium text-[11px] text-white">{s.title}</div>
-                      <div className="text-[10px] text-slate-400">{s.desc}</div>
-                    </div>
-                  </div>
-                );
-              })}
+          <ol className="space-y-2.5 list-decimal list-inside text-slate-600 pl-1">
+            <li className={simulationStep >= 1 ? 'text-emerald-700 font-medium' : ''}>
+              Customer accessed recovery link
+            </li>
+            <li className={simulationStep >= 2 ? 'text-emerald-700 font-medium' : ''}>
+              Customer completed checkout via UPI or Card
+            </li>
+            <li className={simulationStep >= 3 ? 'text-emerald-700 font-medium' : ''}>
+              Webhook reconciled payment, transitions status to{' '}
+              <strong className="text-emerald-700 font-mono">RECOVERED</strong>, and emits merchant notifications.
+            </li>
+          </ol>
+
+          {simulationStep === 3 && (
+            <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 space-y-1">
+              <div className="flex items-center gap-2 font-bold text-xs">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                <span>Payment Recaptured Successfully!</span>
+              </div>
+              <p className="text-[11px] text-emerald-800">
+                The case is now closed with status <code className="font-mono">RECOVERED</code>. All dashboard metrics, charts, and notifications have synchronized.
+              </p>
             </div>
-          </div>
-
-          <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-300">
-            <strong>Sandbox Guarantee:</strong> No real payment gateway charge is made, no WhatsApp or emails are sent, and no backend database is mutated. All state transitions occur in-memory.
-          </div>
+          )}
         </div>
       </Modal>
 
-      {/* Main Grid: Left 2 Cols (Case Summary, Diagnosis, Strategy, Timeline) & Right 1 Col (Customer, Payment) */}
+      {/* Main 2-Column Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column (2 Cols) */}
+        {/* Left Column (2 Cols): Core Diagnosis, Strategy, Timeline */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Section A: Case Summary */}
-          <Card>
+          {/* AI Diagnosis Card */}
+          <Card className="shadow-2xs">
             <CardHeader>
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <ShieldAlert className="w-4 h-4 text-indigo-400" />
-                  <CardTitle>Case Summary</CardTitle>
-                </div>
-                <Badge variant="outline">Failure: {caseDetail.failureReasonCategory || 'Uncategorized'}</Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
-                <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-1">
-                  <span className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold">Recoverable</span>
-                  <div className="text-base font-bold text-white font-mono">
-                    {formatCurrency(caseDetail.estimatedRecoverableAmount, caseDetail.currency)}
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-lg bg-blue-50 text-blue-600">
+                    <Cpu className="w-4 h-4" />
                   </div>
-                </div>
-
-                <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-1">
-                  <span className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold">Recovered</span>
-                  <div className="text-base font-bold text-emerald-400 font-mono">
-                    {formatCurrency(caseDetail.recoveredAmount, caseDetail.currency)}
+                  <div>
+                    <CardTitle>AI Diagnosis &amp; Reasoning</CardTitle>
+                    <CardDescription>
+                      {caseDetail.latestDiagnosis?.modelName || 'Gemini 3.7 Flash'} autonomous analysis of failure telemetry
+                    </CardDescription>
                   </div>
-                </div>
-
-                <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-1">
-                  <span className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold">Created At</span>
-                  <div className="font-mono text-slate-300 text-[11px]">
-                    {formatDateTime(caseDetail.createdAt)}
-                  </div>
-                </div>
-
-                <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-1">
-                  <span className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold">Expires At</span>
-                  <div className="font-mono text-slate-300 text-[11px]">
-                    {formatDateTime(caseDetail.expiresAt)}
-                  </div>
-                </div>
-              </div>
-
-              {(caseDetail.recoveredAt || caseDetail.closedAt) && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-800 text-xs">
-                  {caseDetail.recoveredAt && (
-                    <div className="flex items-center gap-2 text-emerald-400 font-mono text-[11px]">
-                      <Clock className="w-3.5 h-3.5" />
-                      Recovered on: {formatDateTime(caseDetail.recoveredAt)}
-                    </div>
-                  )}
-                  {caseDetail.closedAt && (
-                    <div className="flex items-center gap-2 text-slate-400 font-mono text-[11px]">
-                      <Clock className="w-3.5 h-3.5" />
-                      Closed on: {formatDateTime(caseDetail.closedAt)}
-                    </div>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Section D: AI Failure Diagnosis */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Cpu className="w-4 h-4 text-purple-400" />
-                  <CardTitle>AI Diagnosis & Reasoning</CardTitle>
                 </div>
                 <div className="flex items-center gap-2">
                   {isDemoMode && (
-                    <Badge variant="warning" className="text-[10px]">
-                      Simulated AI Data
-                    </Badge>
+                    <Badge variant="warning">Simulated AI Data</Badge>
                   )}
-                  {caseDetail.latestDiagnosis ? (
+                  {caseDetail.latestDiagnosis?.confidenceScore && (
                     <Badge variant="info">
-                      {Math.round(Number(caseDetail.latestDiagnosis.confidenceScore || 0) * 100)}% Confidence
+                      {Math.round(Number(caseDetail.latestDiagnosis.confidenceScore) * 100)}% Confidence
                     </Badge>
-                  ) : (
-                    <Badge variant="default">Pending</Badge>
                   )}
                 </div>
               </div>
-              <CardDescription>
-                Autonomous root-cause deduction via{' '}
-                <span className="font-mono text-indigo-300">
-                  {caseDetail.latestDiagnosis?.modelName || 'Google Gemini 3.7 Flash'}
-                </span>
-              </CardDescription>
             </CardHeader>
+
             <CardContent className="space-y-4 text-xs">
-              {caseDetail.latestDiagnosis ? (
-                <>
-                  <div className="p-3 rounded-xl bg-purple-950/20 border border-purple-500/20 space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-purple-300 uppercase tracking-wider text-[10px]">
-                        Prescribed Recovery Action
-                      </span>
-                      <span className="text-[11px] font-mono text-slate-400">
-                        Channel: {caseDetail.latestDiagnosis.channel}
-                      </span>
-                    </div>
-                    <div className="text-sm font-bold text-white">
-                      {caseDetail.latestDiagnosis.recommendedAction}
-                    </div>
-                  </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    Failure Category
+                  </span>
+                  <p className="font-mono font-bold text-slate-900 text-sm">
+                    {caseDetail.failureReasonCategory || 'UNKNOWN'}
+                  </p>
+                </div>
 
-                  <div className="space-y-1">
-                    <span className="text-slate-400 font-semibold uppercase text-[10px] tracking-wider block">
-                      Autonomous Reasoning
-                    </span>
-                    <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 text-slate-300 leading-relaxed italic">
-                      "{caseDetail.latestDiagnosis.reasoning}"
-                    </div>
-                  </div>
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    Recommended Action
+                  </span>
+                  <p className="font-semibold text-emerald-700 text-sm">
+                    {caseDetail.latestDiagnosis?.recommendedAction || 'AUTOMATED_DISPATCH'}
+                  </p>
+                </div>
+              </div>
 
-                  {caseDetail.latestDiagnosis.decisionFactors && (
-                    <div className="space-y-1">
-                      <span className="text-slate-400 font-semibold uppercase text-[10px] tracking-wider block">
-                        Diagnostic Factors
-                      </span>
-                      <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800/80 font-mono text-[11px] text-slate-400 break-all">
-                        {caseDetail.latestDiagnosis.decisionFactors}
-                      </div>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div className="p-4 rounded-xl bg-slate-950/50 border border-slate-800 text-slate-400 text-xs">
-                  Diagnosis pending orchestration queue execution.
+              {caseDetail.latestDiagnosis?.reasoning && (
+                <div className="space-y-1.5">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 block">
+                    AI Diagnosis Rationale
+                  </span>
+                  <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 leading-relaxed italic">
+                    &ldquo;{caseDetail.latestDiagnosis.reasoning}&rdquo;
+                  </div>
                 </div>
               )}
             </CardContent>
           </Card>
 
-          {/* Section E: Recovery Strategy */}
-          <Card>
+          {/* Recovery Strategy Card */}
+          <Card className="shadow-2xs">
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-indigo-400" />
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-emerald-50 text-emerald-600">
+                  <Layers className="w-4 h-4" />
+                </div>
+                <div>
                   <CardTitle>Recovery Strategy</CardTitle>
-                </div>
-                <div className="flex items-center gap-2">
-                  {strategySnapshot?.priority && (
-                    <Badge variant="outline">Priority: {strategySnapshot.priority}</Badge>
-                  )}
-                  {isDemoMode && (
-                    <Badge variant="outline" className="text-[10px] text-indigo-300 border-indigo-500/30">
-                      Policy Engine: Active
-                    </Badge>
-                  )}
+                  <CardDescription>
+                    Selected channel orchestration and dispatch parameters
+                  </CardDescription>
                 </div>
               </div>
-              <CardDescription>
-                Tailored multi-channel dispatch policy and deterministic fallback rules
-              </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-slate-400 uppercase font-semibold">Primary Channel</span>
-                    <span className="text-[10px] font-mono text-emerald-400">Delay: Immediate</span>
-                  </div>
-                  <div className="font-semibold text-slate-100 flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                    {strategySnapshot?.channel || caseDetail.latestDiagnosis?.channel || 'Autonomous Selection'}
-                  </div>
-                  <div className="text-[11px] text-slate-400">
-                    Action: {strategySnapshot?.recommendedAction || caseDetail.latestDiagnosis?.recommendedAction || '—'}
-                  </div>
+
+            <CardContent className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 block">
+                    Primary Channel
+                  </span>
+                  <span className="font-semibold text-slate-900">
+                    {caseDetail.latestDiagnosis?.channel || 'WHATSAPP'}
+                  </span>
                 </div>
 
-                <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-slate-400 uppercase font-semibold">Fallback Channel</span>
-                    <span className="text-[10px] font-mono text-amber-400">Delay: 2 Hours</span>
-                  </div>
-                  <div className="font-semibold text-slate-100 flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-amber-400" />
-                    {strategySnapshot?.fallbackChannel || 'EMAIL (Automatic)'}
-                  </div>
-                  <div className="text-[11px] text-slate-400">
-                    Action: {strategySnapshot?.fallbackAction || 'Standard Fallback Dispatch'}
-                  </div>
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 block">
+                    Priority
+                  </span>
+                  <span className="font-semibold text-slate-900">
+                    Level: {caseDetail.priority}
+                  </span>
+                </div>
+
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 block">
+                    Delay: Immediate
+                  </span>
+                  <span className="font-semibold text-slate-900 font-mono">
+                    Immediate (0s)
+                  </span>
+                </div>
+
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 block">
+                    Fallback Channel
+                  </span>
+                  <span className="font-semibold text-slate-900">
+                    {caseDetail.attempts?.[0]?.strategySnapshot?.fallbackChannel || 'EMAIL'} (Delay: 2 Hours)
+                  </span>
                 </div>
               </div>
 
-              {strategySnapshot?.reason && (
-                <p className="text-slate-400 text-xs italic">
-                  Strategy rationale: {strategySnapshot.reason}
-                </p>
+              {(caseDetail.attempts?.[0]?.strategySnapshot?.recommendedAction || caseDetail.latestDiagnosis?.recommendedAction) && (
+                <div className="pt-2.5 border-t border-slate-100 text-xs text-slate-600">
+                  <span className="font-semibold text-slate-700">Strategy Action: </span>
+                  <span>{caseDetail.attempts?.[0]?.strategySnapshot?.recommendedAction || caseDetail.latestDiagnosis?.recommendedAction}</span>
+                </div>
               )}
             </CardContent>
           </Card>
 
-          {/* Section F: Recovery Attempts & Execution Timeline */}
-          <Card>
+          {/* Recovery Timeline Card */}
+          <Card className="shadow-2xs">
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-emerald-400" />
-                  <CardTitle>Execution Timeline & Attempts</CardTitle>
-                </div>
-                <Badge variant="outline">{caseDetail.attempts.length} Attempts</Badge>
-              </div>
+              <CardTitle>Execution Timeline &amp; Attempts</CardTitle>
               <CardDescription>
-                Chronological ledger of autonomous recovery events, provider callbacks, and customer touchpoints
+                Chronological event stream from webhook ingestion to final settlement
               </CardDescription>
             </CardHeader>
+
             <CardContent>
-              <RecoveryTimeline caseDetail={caseDetail} attempts={caseDetail.attempts} />
+              <RecoveryTimeline
+                caseDetail={caseDetail}
+                attempts={caseDetail.attempts || []}
+              />
             </CardContent>
           </Card>
         </div>
 
-        {/* Right Column (1 Col): Customer & Payment Info */}
+        {/* Right Column (1 Col): Customer, Payment & Gateway Info */}
         <div className="space-y-6">
-          {/* Section B: Customer Card */}
-          <Card>
+          {/* Payment Card */}
+          <Card className="shadow-2xs">
             <CardHeader>
-              <div className="flex items-center gap-2">
-                <User className="w-4 h-4 text-indigo-400" />
-                <CardTitle>Customer Information</CardTitle>
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-slate-100 text-slate-700">
+                  <CreditCard className="w-4 h-4" />
+                </div>
+                <div>
+                  <CardTitle>Payment Details</CardTitle>
+                  <CardDescription>Failed transaction details</CardDescription>
+                </div>
               </div>
             </CardHeader>
+
             <CardContent className="space-y-3 text-xs">
-              <div className="space-y-1">
-                <span className="text-[10px] text-slate-400 uppercase font-semibold">Full Name</span>
-                <div className="font-semibold text-slate-100 text-sm">
-                  {caseDetail.customer?.name || 'Anonymous Customer'}
-                </div>
+              <div className="flex items-center justify-between py-1.5 border-b border-slate-100">
+                <span className="text-slate-500">Amount</span>
+                <span className="font-mono font-bold text-slate-900 text-sm">
+                  {formatCurrency(caseDetail.estimatedRecoverableAmount, caseDetail.currency)}
+                </span>
               </div>
 
-              <div className="space-y-1">
-                <span className="text-[10px] text-slate-400 uppercase font-semibold">Email Address</span>
-                <div className="font-mono text-slate-200 break-all">
-                  {caseDetail.customer?.email || '—'}
-                </div>
+              <div className="flex items-center justify-between py-1.5 border-b border-slate-100">
+                <span className="text-slate-500">Payment Status</span>
+                <Badge variant={caseDetail.payment?.status === 'CAPTURED' ? 'success' : 'danger'}>
+                  {caseDetail.payment?.status || 'FAILED'}
+                </Badge>
               </div>
 
-              <div className="space-y-1">
-                <span className="text-[10px] text-slate-400 uppercase font-semibold">Phone Number</span>
-                <div className="font-mono text-slate-200">
-                  {caseDetail.customer?.phone || '—'}
-                </div>
+              <div className="flex items-center justify-between py-1.5 border-b border-slate-100">
+                <span className="text-slate-500">Payment ID</span>
+                <span className="font-mono text-slate-800">
+                  {caseDetail.payment?.razorpayPaymentId || caseDetail.payment?.id || '—'}
+                </span>
               </div>
 
-              {caseDetail.customer?.razorpayCustomerId && (
-                <div className="space-y-1 pt-2 border-t border-slate-800">
-                  <span className="text-[10px] text-slate-400 uppercase font-semibold">Razorpay Customer ID</span>
-                  <div className="font-mono text-indigo-300 text-[11px]">
-                    {caseDetail.customer.razorpayCustomerId}
-                  </div>
+              {caseDetail.payment?.errorDescription && (
+                <div className="flex items-start justify-between py-1.5 border-b border-slate-100">
+                  <span className="text-slate-500">Error</span>
+                  <span className="text-slate-700 text-right max-w-[200px]">
+                    {caseDetail.payment.errorDescription}
+                  </span>
                 </div>
               )}
+
+              <div className="flex items-center justify-between py-1.5">
+                <span className="text-slate-500">Payment Method</span>
+                <span className="font-mono text-slate-800 uppercase">
+                  {caseDetail.payment?.method || 'UPI / Card'}
+                </span>
+              </div>
             </CardContent>
           </Card>
 
-          {/* Section C: Payment Card */}
-          <Card>
+          {/* Customer Profile Card */}
+          <Card className="shadow-2xs">
             <CardHeader>
-              <div className="flex items-center gap-2">
-                <CreditCard className="w-4 h-4 text-emerald-400" />
-                <CardTitle>Payment Details</CardTitle>
-              </div>
-              <CardDescription>Underlying transaction data</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3 text-xs">
-              <div className="space-y-1">
-                <span className="text-[10px] text-slate-400 uppercase font-semibold">Payment Amount</span>
-                <div className="text-lg font-bold text-white font-mono">
-                  {formatCurrency(caseDetail.payment?.amount, caseDetail.payment?.currency)}
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-slate-100 text-slate-700">
+                  <User className="w-4 h-4" />
+                </div>
+                <div>
+                  <CardTitle>Customer Profile</CardTitle>
+                  <CardDescription>Payer contact information</CardDescription>
                 </div>
               </div>
+            </CardHeader>
 
-              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800">
-                <div>
-                  <span className="text-[10px] text-slate-400 uppercase font-semibold">Status</span>
-                  <div className="font-medium text-slate-200 mt-0.5">
-                    <Badge variant={caseDetail.payment?.status === 'CAPTURED' ? 'success' : 'danger'}>
-                      {caseDetail.payment?.status || 'UNKNOWN'}
+            <CardContent className="space-y-3 text-xs">
+              <div className="flex items-center justify-between py-1.5 border-b border-slate-100">
+                <span className="text-slate-500">Name</span>
+                <span className="font-semibold text-slate-900">
+                  {caseDetail.customer?.name || 'Anonymous Payer'}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between py-1.5 border-b border-slate-100">
+                <span className="text-slate-500">Email</span>
+                <span className="text-slate-800">
+                  {caseDetail.customer?.email || '—'}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between py-1.5">
+                <span className="text-slate-500">Phone</span>
+                <span className="font-mono text-slate-800">
+                  {caseDetail.customer?.phone || '—'}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Attempts Summary Card */}
+          <Card className="shadow-2xs">
+            <CardHeader>
+              <CardTitle>Recovery Attempts</CardTitle>
+              <CardDescription>
+                {caseDetail.attempts?.length ?? 0} total attempts executed
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent className="space-y-2.5 text-xs">
+              {(!caseDetail.attempts || caseDetail.attempts.length === 0) ? (
+                <p className="text-slate-400 italic">No recovery attempts dispatched yet.</p>
+              ) : (
+                caseDetail.attempts.map((att) => (
+                  <div
+                    key={att.id}
+                    className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-between gap-2"
+                  >
+                    <div>
+                      <span className="font-semibold text-slate-800 block">
+                        Attempt #{att.attemptNumber} ({att.channel})
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        {formatDateTime(att.createdAt)}
+                      </span>
+                    </div>
+                    <Badge variant={att.status === 'SUCCESS' ? 'success' : 'default'} className="text-[10px]">
+                      {att.status}
                     </Badge>
                   </div>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 uppercase font-semibold">Method</span>
-                  <div className="font-medium text-slate-200 mt-0.5 font-mono">
-                    {caseDetail.payment?.method || 'OTHER'}
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-1 pt-2 border-t border-slate-800">
-                <span className="text-[10px] text-slate-400 uppercase font-semibold">Razorpay Payment ID</span>
-                <div className="font-mono text-slate-200 break-all text-[11px]">
-                  {caseDetail.payment?.razorpayPaymentId || '—'}
-                </div>
-              </div>
-
-              {caseDetail.payment?.razorpayOrderId && (
-                <div className="space-y-1">
-                  <span className="text-[10px] text-slate-400 uppercase font-semibold">Razorpay Order ID</span>
-                  <div className="font-mono text-slate-300 break-all text-[11px]">
-                    {caseDetail.payment.razorpayOrderId}
-                  </div>
-                </div>
-              )}
-
-              {caseDetail.payment?.errorCode && (
-                <div className="p-3 rounded-xl bg-rose-950/20 border border-rose-500/20 space-y-1">
-                  <div className="text-[10px] uppercase font-semibold text-rose-400">
-                    Error: {caseDetail.payment.errorCode}
-                  </div>
-                  <div className="text-slate-300 text-[11px]">
-                    {caseDetail.payment.errorDescription || caseDetail.payment.errorReason || 'Payment declined by gateway'}
-                  </div>
-                </div>
+                ))
               )}
             </CardContent>
           </Card>

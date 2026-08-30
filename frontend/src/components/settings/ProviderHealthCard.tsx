@@ -140,26 +140,26 @@ export function ProviderHealthCard() {
     <div className="space-y-6">
       {/* Overall Health Banner */}
       <div
-        className={`p-5 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors ${
+        className={`p-5 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors shadow-2xs ${
           overall === 'HEALTHY'
-            ? 'bg-emerald-950/20 border-emerald-500/30'
+            ? 'bg-emerald-50/80 border-emerald-200'
             : overall === 'DEGRADED'
-            ? 'bg-amber-950/20 border-amber-500/30'
+            ? 'bg-amber-50/80 border-amber-200'
             : overall === 'UNAVAILABLE'
-            ? 'bg-rose-950/20 border-rose-500/30'
-            : 'bg-slate-900/60 border-slate-800'
+            ? 'bg-rose-50/80 border-rose-200'
+            : 'bg-white border-slate-200'
         }`}
       >
         <div className="flex items-center gap-3.5">
           <div
-            className={`w-10 h-10 rounded-xl flex items-center justify-center border ${
+            className={`w-10 h-10 rounded-xl flex items-center justify-center border shadow-2xs ${
               overall === 'HEALTHY'
-                ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400'
+                ? 'bg-white border-emerald-300 text-emerald-600'
                 : overall === 'DEGRADED'
-                ? 'bg-amber-500/20 border-amber-500/30 text-amber-400'
+                ? 'bg-white border-amber-300 text-amber-600'
                 : overall === 'UNAVAILABLE'
-                ? 'bg-rose-500/20 border-rose-500/30 text-rose-400'
-                : 'bg-slate-800 border-slate-700 text-slate-400'
+                ? 'bg-white border-rose-300 text-rose-600'
+                : 'bg-slate-100 border-slate-200 text-slate-500'
             }`}
           >
             {overall === 'HEALTHY' ? (
@@ -175,7 +175,7 @@ export function ProviderHealthCard() {
 
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-bold text-white">
+              <h3 className="text-sm font-bold text-slate-900">
                 {overall === 'HEALTHY'
                   ? 'All Recovery & Communication Providers Operational'
                   : overall === 'DEGRADED'
@@ -188,7 +188,7 @@ export function ProviderHealthCard() {
                 {overallConfig.label}
               </Badge>
             </div>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-slate-500 mt-0.5">
               Live automated health checks from RecoverAI multi-channel dispatch engine.
             </p>
           </div>
@@ -215,7 +215,7 @@ export function ProviderHealthCard() {
       {/* Provider Status Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {providers.length === 0 ? (
-          <div className="col-span-2 p-8 text-center rounded-xl bg-slate-900/40 border border-slate-800 text-slate-400 text-xs">
+          <div className="col-span-2 p-8 text-center rounded-xl bg-white border border-slate-200 text-slate-500 text-xs shadow-2xs">
             No provider health checks configured.
           </div>
         ) : (
@@ -226,18 +226,18 @@ export function ProviderHealthCard() {
             return (
               <Card
                 key={item.id}
-                className="border-slate-800 bg-slate-950/60 hover:border-slate-700 transition space-y-3"
+                className="border-slate-200 bg-white hover:border-slate-300 transition-colors space-y-3 shadow-2xs"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 flex items-center justify-center shrink-0">
-                      <ChannelIcon className="w-4 h-4" />
+                    <div className="w-9 h-9 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 flex items-center justify-center shrink-0">
+                      <ChannelIcon className="w-4 h-4 text-emerald-600" />
                     </div>
                     <div>
-                      <h4 className="text-sm font-semibold text-white">
+                      <h4 className="text-sm font-semibold text-slate-900">
                         {item.name}
                       </h4>
-                      <span className="text-xs text-slate-400 font-medium">
+                      <span className="text-xs text-slate-500 font-medium">
                         {item.channel}
                       </span>
                     </div>
@@ -249,19 +249,19 @@ export function ProviderHealthCard() {
                 </div>
 
                 {item.message ? (
-                  <div className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800/80 text-xs font-mono text-slate-300 break-words">
+                  <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-xs font-mono text-slate-700 break-words">
                     {item.message}
                   </div>
                 ) : (
-                  <div className="text-xs text-slate-500 italic">
+                  <div className="text-xs text-slate-400 italic">
                     Diagnostic check returned nominal response without warnings.
                   </div>
                 )}
 
-                <div className="pt-2 border-t border-slate-900 flex items-center justify-between text-[10px] text-slate-500 font-mono">
+                <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400 font-mono">
                   <span>Channel ID: {item.id}</span>
-                  <span className="flex items-center gap-1 text-slate-400">
-                    <Activity className="w-3 h-3 text-indigo-400" />
+                  <span className="flex items-center gap-1 text-slate-500 font-medium">
+                    <Activity className="w-3 h-3 text-emerald-600" />
                     Monitored
                   </span>
                 </div>
@@ -272,16 +272,16 @@ export function ProviderHealthCard() {
       </div>
 
       {/* Zero Secret Exposure Security Assurance Banner */}
-      <Card className="border-slate-800/80 bg-slate-950/40">
+      <Card className="border-slate-200 bg-white shadow-2xs">
         <div className="flex items-start gap-3">
-          <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 shrink-0">
+          <div className="p-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-600 shrink-0 shadow-2xs">
             <ShieldCheck className="w-4 h-4" />
           </div>
-          <div className="text-xs text-slate-400 space-y-1">
-            <h5 className="font-semibold text-slate-200">
+          <div className="text-xs text-slate-600 space-y-1">
+            <h5 className="font-semibold text-slate-900">
               Zero Secret Exposure Policy
             </h5>
-            <p>
+            <p className="text-slate-500">
               Upstream communication provider credentials (Twilio tokens, SendGrid API keys, Razorpay secrets)
               remain isolated in secure server-side memory and are never serialized or returned through merchant-facing APIs.
             </p>

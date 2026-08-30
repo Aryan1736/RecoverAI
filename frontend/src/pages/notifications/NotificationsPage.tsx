@@ -20,7 +20,11 @@ import {
   markAsRead,
   markAllAsRead,
 } from '../../api/notifications';
-import { getDemoNotifications } from '../../api/demo';
+import {
+  getDemoNotifications,
+  markDemoNotificationRead,
+  markAllDemoNotificationsRead,
+} from '../../api/demo';
 import { useDemoMode } from '../../hooks/useDemoMode';
 import type {
   NotificationResponseDto,
@@ -61,7 +65,12 @@ export function NotificationsPage() {
         selectedEvent !== 'ALL' ? (selectedEvent as MerchantNotificationEvent) : undefined;
 
       const response = isDemoMode
-        ? await getDemoNotifications()
+        ? await getDemoNotifications({
+            page: currentPage,
+            size: PAGE_SIZE,
+            unreadOnly: unreadOnly ? true : undefined,
+            event: eventFilter,
+          })
         : await getNotifications({
             page: currentPage,
             size: PAGE_SIZE,
@@ -89,7 +98,12 @@ export function NotificationsPage() {
           selectedEvent !== 'ALL' ? (selectedEvent as MerchantNotificationEvent) : undefined;
 
         const response = isDemoMode
-          ? await getDemoNotifications()
+          ? await getDemoNotifications({
+              page: currentPage,
+              size: PAGE_SIZE,
+              unreadOnly: unreadOnly ? true : undefined,
+              event: eventFilter,
+            })
           : await getNotifications({
               page: currentPage,
               size: PAGE_SIZE,
@@ -125,11 +139,12 @@ export function NotificationsPage() {
     setMarkingId(id);
     try {
       if (isDemoMode) {
+        const updated = await markDemoNotificationRead(id);
         setNotifications((prev) =>
-          prev.map((item) => (item.id === id ? { ...item, read: true } : item))
+          prev.map((item) => (item.id === id ? updated : item))
         );
         if (selectedNotification && selectedNotification.id === id) {
-          setSelectedNotification({ ...selectedNotification, read: true });
+          setSelectedNotification(updated);
         }
         toast.success('Notification marked as read (Simulated)');
         return;
@@ -154,7 +169,8 @@ export function NotificationsPage() {
     setIsMarkingAll(true);
     try {
       if (isDemoMode) {
-        setNotifications((prev) => prev.map((item) => ({ ...item, read: true })));
+        await markAllDemoNotificationsRead();
+        setNotifications((prev) => prev.map((item) => ({ ...item, read: true, status: 'READ' })));
         toast.success('Marked all notifications as read (Simulated)');
         return;
       }

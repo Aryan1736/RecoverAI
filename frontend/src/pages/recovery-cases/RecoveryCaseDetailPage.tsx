@@ -11,9 +11,11 @@ import {
   Clock,
   Sparkles,
   Layers,
+  CheckCircle2,
+  PlayCircle,
 } from 'lucide-react';
 import { getRecoveryCase, cancelRecoveryCase } from '../../api/recovery-cases';
-import { getDemoRecoveryCase } from '../../api/demo';
+import { getDemoRecoveryCase, simulateDemoRecovery } from '../../api/demo';
 import { useDemoMode } from '../../hooks/useDemoMode';
 import type {
   RecoveryCaseDetail,
@@ -40,6 +42,11 @@ export function RecoveryCaseDetailPage() {
   // Cancellation modal state
   const [cancelModalOpen, setCancelModalOpen] = useState<boolean>(false);
   const [isCancelling, setIsCancelling] = useState<boolean>(false);
+
+  // Simulation modal state
+  const [simulateModalOpen, setSimulateModalOpen] = useState<boolean>(false);
+  const [isSimulating, setIsSimulating] = useState<boolean>(false);
+  const [simulationStep, setSimulationStep] = useState<number>(0);
 
   const fetchCaseDetail = useCallback(async () => {
     if (!id) return;
@@ -117,6 +124,76 @@ export function RecoveryCaseDetailPage() {
     (caseDetail.status === 'OPEN' ||
       caseDetail.status === 'IN_PROGRESS' ||
       caseDetail.status === 'FAILED');
+
+  // Check if case is eligible for interactive customer recovery simulation
+  const isSimulatable =
+    isDemoMode &&
+    caseDetail &&
+    (caseDetail.status === 'OPEN' || caseDetail.status === 'IN_PROGRESS');
+
+  const simulationSteps = [
+    {
+      step: 1,
+      title: 'Customer accessed recovery link',
+      desc: 'Simulated customer opened recovery link delivered via channel',
+    },
+    {
+      step: 2,
+      title: 'Payment method selected',
+      desc: 'Customer chose alternative payment instrument (UPI / Netbanking)',
+    },
+    {
+      step: 3,
+      title: 'Gateway authorized & captured payment',
+      desc: 'Razorpay simulated payment capture event confirmed',
+    },
+    {
+      step: 4,
+      title: 'Case resolved to RECOVERED',
+      desc: 'Central demo state updated and PAYMENT_RECOVERED notification generated',
+    },
+  ];
+
+  const handleSimulateRecovery = async () => {
+    if (!id || !caseDetail) return;
+    if (!isSimulatable) {
+      toast.warning(
+        `Simulation unavailable: Case ${caseDetail.id} is in terminal status "${caseDetail.status}".`
+      );
+      return;
+    }
+
+    setIsSimulating(true);
+    setSimulationStep(1);
+
+    const stepDelay = import.meta.env?.MODE === 'test' ? 10 : 300;
+
+    try {
+      await new Promise((r) => setTimeout(r, stepDelay));
+      setSimulationStep(2);
+      await new Promise((r) => setTimeout(r, stepDelay));
+      setSimulationStep(3);
+      await new Promise((r) => setTimeout(r, stepDelay));
+      setSimulationStep(4);
+      await new Promise((r) => setTimeout(r, stepDelay));
+
+      const updated = await simulateDemoRecovery(id);
+      setCaseDetail(updated);
+      toast.success(
+        `Customer Recovery simulated successfully! Transaction captured and ${formatCurrency(
+          updated.recoveredAmount,
+          updated.currency
+        )} recovered.`
+      );
+      setSimulateModalOpen(false);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Simulation failed';
+      toast.error(message);
+    } finally {
+      setIsSimulating(false);
+      setSimulationStep(0);
+    }
+  };
 
   const formatCurrency = (val: number | undefined, currency?: string) => {
     return new Intl.NumberFormat('en-IN', {
@@ -239,6 +316,35 @@ export function RecoveryCaseDetailPage() {
             Refresh
           </Button>
 
+          {isDemoMode && isSimulatable && (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => {
+                setSimulationStep(0);
+                setSimulateModalOpen(true);
+              }}
+              leftIcon={<Sparkles className="w-3.5 h-3.5" />}
+              data-testid="simulate-recovery-btn"
+            >
+              Simulate Customer Recovery
+            </Button>
+          )}
+
+          {isDemoMode && !isSimulatable && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled
+              title="Recovery simulation unavailable for terminal cases"
+              className="opacity-60 cursor-not-allowed text-slate-400"
+              leftIcon={<Sparkles className="w-3.5 h-3.5 opacity-40 text-slate-500" />}
+              data-testid="simulate-recovery-disabled-btn"
+            >
+              Simulation Unavailable ({caseDetail.status})
+            </Button>
+          )}
+
           {isCancellable && (
             <Button
               variant="danger"
@@ -251,6 +357,47 @@ export function RecoveryCaseDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Interactive Demo Mode Simulator Banner */}
+      {isDemoMode && (
+        <div
+          role="status"
+          aria-label="Interactive Demo Simulation Status"
+          className="p-4 rounded-xl bg-gradient-to-r from-indigo-950/40 via-purple-950/20 to-slate-900 border border-indigo-500/30 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm"
+        >
+          <div className="flex items-start sm:items-center gap-2.5">
+            <Sparkles className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5 sm:mt-0" />
+            <div>
+              <span className="font-semibold text-white">Interactive Recovery Simulator:</span>{' '}
+              <span className="text-slate-300">
+                {isSimulatable
+                  ? `Case is ${caseDetail.status}. Simulate customer accessing recovery link and completing checkout to verify closed-loop reconciliation.`
+                  : `Simulation is disabled because case is in terminal status "${caseDetail.status}". Terminal cases cannot be re-recovered.`}
+              </span>
+            </div>
+          </div>
+
+          {isSimulatable ? (
+            <Button
+              size="sm"
+              variant="primary"
+              onClick={() => {
+                setSimulationStep(0);
+                setSimulateModalOpen(true);
+              }}
+              leftIcon={<PlayCircle className="w-3.5 h-3.5" />}
+              className="shrink-0 self-start sm:self-auto"
+              data-testid="simulate-recovery-banner-btn"
+            >
+              Simulate Recovery
+            </Button>
+          ) : (
+            <Badge variant="outline" className="shrink-0 self-start sm:self-auto font-mono text-[10px]">
+              Terminal Case ({caseDetail.status})
+            </Badge>
+          )}
+        </div>
+      )}
 
       {/* Confirmation Modal for Case Cancellation */}
       <Modal
@@ -291,6 +438,108 @@ export function RecoveryCaseDetailPage() {
             Any currently scheduled communications (WhatsApp, Email, SMS) will be marked as{' '}
             <code className="text-amber-300 font-mono">SKIPPED</code> and will not be dispatched.
           </p>
+        </div>
+      </Modal>
+
+      {/* Simulation Progression Modal */}
+      <Modal
+        isOpen={simulateModalOpen}
+        onClose={() => {
+          if (!isSimulating) setSimulateModalOpen(false);
+        }}
+        title="Simulate Customer Recovery"
+        description="Experience the end-to-end automated payment recovery journey in sandbox mode."
+        footer={
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSimulateModalOpen(false)}
+              disabled={isSimulating}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleSimulateRecovery}
+              isLoading={isSimulating}
+              leftIcon={<Sparkles className="w-3.5 h-3.5" />}
+              data-testid="confirm-simulation-btn"
+            >
+              {isSimulating ? 'Simulating Recovery...' : 'Confirm & Simulate Recovery'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4 text-xs text-slate-300">
+          <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 space-y-1.5">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-slate-400">Target Case:</span>
+              <span className="font-mono text-white font-semibold">{caseDetail.id}</span>
+            </div>
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-slate-400">Customer:</span>
+              <span className="text-slate-200">{caseDetail.customer?.name || 'Customer'}</span>
+            </div>
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-slate-400">Recoverable Amount:</span>
+              <span className="font-mono font-bold text-emerald-400">
+                {formatCurrency(caseDetail.estimatedRecoverableAmount, caseDetail.currency)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-slate-400">Prescribed Channel:</span>
+              <span className="font-mono text-indigo-300 font-semibold">
+                {strategySnapshot?.channel || caseDetail.latestDiagnosis?.channel || 'WHATSAPP'}
+              </span>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <span className="font-semibold text-slate-200 uppercase tracking-wider text-[10px] block">
+              Simulation Progression Stages:
+            </span>
+            <div className="space-y-2">
+              {simulationSteps.map((s) => {
+                const isCurrent = simulationStep === s.step;
+                const isPassed = simulationStep > s.step;
+
+                return (
+                  <div
+                    key={s.step}
+                    className={`p-2.5 rounded-lg border transition flex items-start gap-2.5 ${
+                      isCurrent
+                        ? 'bg-indigo-950/40 border-indigo-500/50 text-indigo-200'
+                        : isPassed
+                        ? 'bg-emerald-950/20 border-emerald-500/30 text-emerald-300'
+                        : 'bg-slate-950/40 border-slate-800/80 text-slate-400'
+                    }`}
+                  >
+                    <div className="mt-0.5 shrink-0">
+                      {isPassed ? (
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                      ) : isCurrent ? (
+                        <RefreshCw className="w-3.5 h-3.5 text-indigo-400 animate-spin" />
+                      ) : (
+                        <span className="w-3.5 h-3.5 rounded-full border border-slate-600 flex items-center justify-center text-[9px] font-mono">
+                          {s.step}
+                        </span>
+                      )}
+                    </div>
+                    <div className="space-y-0.5 flex-1">
+                      <div className="font-medium text-[11px] text-white">{s.title}</div>
+                      <div className="text-[10px] text-slate-400">{s.desc}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-300">
+            <strong>Sandbox Guarantee:</strong> No real payment gateway charge is made, no WhatsApp or emails are sent, and no backend database is mutated. All state transitions occur in-memory.
+          </div>
         </div>
       </Modal>
 
@@ -367,13 +616,20 @@ export function RecoveryCaseDetailPage() {
                   <Cpu className="w-4 h-4 text-purple-400" />
                   <CardTitle>AI Diagnosis & Reasoning</CardTitle>
                 </div>
-                {caseDetail.latestDiagnosis ? (
-                  <Badge variant="info">
-                    {Math.round(Number(caseDetail.latestDiagnosis.confidenceScore || 0) * 100)}% Confidence
-                  </Badge>
-                ) : (
-                  <Badge variant="default">Pending</Badge>
-                )}
+                <div className="flex items-center gap-2">
+                  {isDemoMode && (
+                    <Badge variant="warning" className="text-[10px]">
+                      Simulated AI Data
+                    </Badge>
+                  )}
+                  {caseDetail.latestDiagnosis ? (
+                    <Badge variant="info">
+                      {Math.round(Number(caseDetail.latestDiagnosis.confidenceScore || 0) * 100)}% Confidence
+                    </Badge>
+                  ) : (
+                    <Badge variant="default">Pending</Badge>
+                  )}
+                </div>
               </div>
               <CardDescription>
                 Autonomous root-cause deduction via{' '}
@@ -435,9 +691,16 @@ export function RecoveryCaseDetailPage() {
                   <Sparkles className="w-4 h-4 text-indigo-400" />
                   <CardTitle>Recovery Strategy</CardTitle>
                 </div>
-                {strategySnapshot?.priority && (
-                  <Badge variant="outline">Priority: {strategySnapshot.priority}</Badge>
-                )}
+                <div className="flex items-center gap-2">
+                  {strategySnapshot?.priority && (
+                    <Badge variant="outline">Priority: {strategySnapshot.priority}</Badge>
+                  )}
+                  {isDemoMode && (
+                    <Badge variant="outline" className="text-[10px] text-indigo-300 border-indigo-500/30">
+                      Policy Engine: Active
+                    </Badge>
+                  )}
+                </div>
               </div>
               <CardDescription>
                 Tailored multi-channel dispatch policy and deterministic fallback rules
@@ -446,7 +709,10 @@ export function RecoveryCaseDetailPage() {
             <CardContent className="space-y-3 text-xs">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-1">
-                  <span className="text-[10px] text-slate-400 uppercase font-semibold">Primary Channel</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-slate-400 uppercase font-semibold">Primary Channel</span>
+                    <span className="text-[10px] font-mono text-emerald-400">Delay: Immediate</span>
+                  </div>
                   <div className="font-semibold text-slate-100 flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-emerald-400" />
                     {strategySnapshot?.channel || caseDetail.latestDiagnosis?.channel || 'Autonomous Selection'}
@@ -457,7 +723,10 @@ export function RecoveryCaseDetailPage() {
                 </div>
 
                 <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-1">
-                  <span className="text-[10px] text-slate-400 uppercase font-semibold">Fallback Channel</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-slate-400 uppercase font-semibold">Fallback Channel</span>
+                    <span className="text-[10px] font-mono text-amber-400">Delay: 2 Hours</span>
+                  </div>
                   <div className="font-semibold text-slate-100 flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-amber-400" />
                     {strategySnapshot?.fallbackChannel || 'EMAIL (Automatic)'}

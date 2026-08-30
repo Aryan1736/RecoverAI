@@ -31,6 +31,19 @@ public interface RecoveryCaseRepository extends JpaRepository<RecoveryCase, UUID
 
     Optional<RecoveryCase> findByPaymentId(UUID paymentId);
 
+    Optional<RecoveryCase> findByPaymentIdAndMerchantId(UUID paymentId, UUID merchantId);
+
+    @Query("SELECT rc FROM RecoveryCase rc WHERE rc.merchant.id = :merchantId AND rc.payment.razorpayOrderId = :orderId AND rc.status IN (:activeStatuses) ORDER BY rc.createdAt DESC")
+    List<RecoveryCase> findActiveByMerchantIdAndRazorpayOrderId(
+            @Param("merchantId") UUID merchantId,
+            @Param("orderId") String orderId,
+            @Param("activeStatuses") java.util.Collection<RecoveryCaseStatus> activeStatuses);
+
+    @Query("SELECT rc FROM RecoveryCase rc WHERE rc.merchant.id = :merchantId AND rc.payment.razorpayOrderId = :orderId ORDER BY rc.createdAt DESC")
+    List<RecoveryCase> findByMerchantIdAndRazorpayOrderId(
+            @Param("merchantId") UUID merchantId,
+            @Param("orderId") String orderId);
+
     Optional<RecoveryCase> findByIdAndMerchantId(UUID id, UUID merchantId);
 
     boolean existsByIdAndMerchantId(UUID id, UUID merchantId);

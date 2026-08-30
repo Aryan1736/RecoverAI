@@ -1306,7 +1306,7 @@ The asynchronous recovery execution queue records structured audit events with `
   - `feature/database-schema`: Core domain entities (Merchant, Customer, Payment, RecoveryCase, RecoveryAttempt, AgentDecision, AuditEvent) with Flyway V1 and V2 migrations.
   - `feature/razorpay-payment-ingestion`: Robust Razorpay webhook ingestion endpoint (`POST /api/v1/webhooks/razorpay`), HMAC-SHA256 constant-time verification, multi-tenant merchant resolution, customer/payment upserting, Flyway V3 `webhook_events` idempotency tracking, deterministic failure categorization, RecoveryCase generation, and audit logging.
   - `feature/ai-failure-diagnosis-engine`: Google Gemini AI failure diagnosis engine (`AIDiagnosisService`, `GeminiClient`, `AIDiagnosisController`), structured JSON recommendations, confidence score validation, tenant isolation, PII masking, `AgentDecision` persistence.
-  - `feature/recovery-orchestration`: Recovery Orchestration layer (`RecoveryOrchestratorService`, `RecoveryActionExecutor`, `DefaultRecoveryActionExecutor`, `RecoveryOrchestrationController`), lifecycle state machine, DB-backed attempt sequencing, duplicate protection, multi-tenant scoping, and audit logging.
+  - `feature/recovery-orchestration`: Recovery Orchestration layer (`RecoveryOrchestratorService`, `RecoveryActionExecutor`, `DefaultRecoveryActionExecutor`, `RecoveryOrchestratorController`), lifecycle state machine, DB-backed attempt sequencing, duplicate protection, multi-tenant scoping, and audit logging.
   - `feature/recovery-communication`: Recovery Communication & Execution Layer (`WhatsAppRecoveryExecutor`, `EmailRecoveryExecutor`, `SmsRecoveryExecutor`, `SmartLinkRecoveryExecutor`, `RetryChargeRecoveryExecutor`, `ManualRecoveryExecutor`, `DefaultRecoveryLinkService`, safe mock providers, configuration properties).
   - `feature/recovery-outcome-webhooks`: Recovery Outcome Webhook & Attempt Reconciliation Layer (`POST /api/v1/webhooks/recovery-outcome`, `RecoveryOutcomeService`, `RecoveryAttemptStateMachine`, `RecoveryOutcomeSignatureVerifier`, Flyway V4 `recovery_outcome_events` idempotency tracking, trusted case reconciliation, multi-tenant isolation, structured audit trails).
   - `feature/recovery-scheduling`: Automated Recovery Scheduling & Background Poller (`POST /api/v1/recovery-cases/{id}/schedule`, `RecoverySchedulerService`, `RecoverySchedulerWorker`, Flyway V5 index migration, atomic claim concurrency, terminal case guarding).
@@ -1316,6 +1316,83 @@ The asynchronous recovery execution queue records structured audit events with `
   - `feature/recovery-strategy-engine`: Deterministic Recovery Strategy Engine (`RecoveryStrategyEngine`, `RecoveryStrategyService`, `RecoveryStrategyController`, `RecoveryStrategyRepository`, Flyway V9 `recovery_strategies` migration, strongly-typed `RecoveryStrategyProperties`, deterministic policy evaluation, confidence thresholding, payment retry guard, channel viability & fallback cascading, max-attempt enforcement, tenant isolation, and audit trails).
   - `feature/strategy-execution-integration`: Strategy-Driven Recovery Execution Integration (Flyway V10 `strategy_snapshot` and `strategy_id` migration, `RecoveryStrategySnapshot` immutable policy snapshot, strategy-aware orchestration & scheduling, delay resolution, atomic worker execution, fallback audit trails, and multi-tenant security guarantees).
   - `feature/recovery-queue`: Asynchronous Recovery Execution Queue (Flyway V11 `recovery_execution_queue` migration, `RecoveryExecutionQueueItem` entity, distributed atomic claiming, strategy snapshot authority, terminal case protection, retry/dead-letter policy, crash recovery, multi-tenant isolation, and complete automated concurrency test suites).
+  - `feature/payment-reconciliation`: Payment Reconciliation & Closed-Loop Recovery State Updates (`PaymentReconciliationService`, Razorpay webhook `payment.captured` & `order.paid` ingestion, recovery link checkout resolution, closed-loop atomic transitions across Payment, RecoveryCase, RecoveryAttempt, and RecoveryExecutionQueue, race-condition safety, multi-tenant isolation, and complete automated test suite).
+
+---
+
+## Payment Reconciliation & Closed-Loop Recovery State Updates (PR #16)
+
+The **Payment Reconciliation Engine** closes the loop between external payment gateway events (Razorpay webhook notifications for `payment.captured` and `order.paid`) and the RecoverAI recovery lifecycle. When a customer completes a payment—either directly, through a retry, or via a RecoverAI smart recovery link—the system reconciles the entire recovery graph, transitioning the case to `RECOVERED`, retiring pending queue tasks, skipping scheduled attempts, marking active communications as successful, and securing the recovery amount from authoritative payment records.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│             Razorpay Webhook Notification                   │
+│          (payment.captured / order.paid)                    │
+└──────────────────────────────┬──────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│                 RazorpayWebhookService                      │
+│      (HMAC verification, tenant resolution, idempotency)    │
+└──────────────────────────────┬──────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│               PaymentReconciliationService                  │
+│       - Match 1: Direct payment association                 │
+│       - Match 2: Order-based match (recovery link checkout) │
+│       - Enforce merchant tenant boundary                    │
+└──────┬───────────────────────┬───────────────────────┬──────┘
+       │                       │                       │
+       ▼                       ▼                       ▼
+┌──────────────┐       ┌──────────────┐       ┌──────────────┐
+│   Payment    │       │ RecoveryCase │       │RecoveryQueue │
+│  (CAPTURED)  │       │ (RECOVERED)  │       │ (COMPLETED)  │
+└──────────────┘       └───────┬──────┘       └──────────────┘
+                               │
+                               ▼
+                       ┌──────────────┐
+                       │RecoveryAttmpt│
+                       │SCHEDULED->SKP│
+                       │ACTIVE->SUCC  │
+                       └───────┬──────┘
+                               │
+                               ▼
+                       ┌──────────────┐
+                       │  AuditEvent  │
+                       │RECONCILED    │
+                       └──────────────┘
+```
+
+### Core Architecture & Capabilities
+
+1. **Dual Ingestion Triggers**:
+   - `payment.captured`: Reconciles the recovery case tied to either the specific payment ID or the shared order ID.
+   - `order.paid`: Handles full order payment events, reconciling active cases associated with that Razorpay order.
+
+2. **Smart Recovery Link & Order Matching Strategy**:
+   - **Direct Payment Match**: Evaluates whether the captured payment is directly linked to an existing `RecoveryCase` (`recoveryCaseRepository.findByPaymentIdAndMerchantId`).
+   - **Order-Based Match**: If a customer clicked a RecoverAI recovery link and initiated a *new* payment attempt on the gateway, Razorpay generates a new `payment_id` under the same `order_id`. The engine resolves the original open or in-progress recovery case using `recoveryCaseRepository.findActiveByMerchantIdAndRazorpayOrderId`.
+
+3. **Authoritative Closed-Loop State Transitions**:
+   - **Payment**: Persisted with status `CAPTURED` and authoritative amount.
+   - **RecoveryCase**: Status transitions to `RECOVERED`; `recoveredAt` populated with timestamp; `recoveredAmount` populated strictly from the authoritative captured payment amount (never unvalidated client inputs).
+   - **RecoveryAttempt**:
+     - Attempts in `SCHEDULED` status are marked `SKIPPED` with result code `CASE_RECOVERED` to prevent unnecessary future communication.
+     - In-flight or dispatched attempts (`IN_FLIGHT`, `SENT`, `DELIVERED`, `CLICKED`) are marked `SUCCESS` with result code `PAYMENT_RECONCILED`.
+     - Terminal attempts (`SUCCESS`, `FAILED`, `SKIPPED`) remain immutable.
+   - **RecoveryExecutionQueueItem**:
+     - All pending queue items (`READY`, `CLAIMED`, `PROCESSING`) for the case are atomically completed via conditional repository update (`status = COMPLETED`, `lastErrorCode = CASE_TERMINAL_RECOVERED`), stopping workers from contacting already-recovered customers.
+
+4. **Concurrency & Race Condition Safety**:
+   - Uses atomic `@Modifying(flushAutomatically = true, clearAutomatically = true)` conditional updates at the database level.
+   - Secondary safety boundary: Queue workers verify terminal-case protection prior to executing actions.
+
+5. **Multi-Tenant Security Guarantee**:
+   - Cross-tenant payment reconciliation is strictly prevented: matching queries and updates always scope on `merchant_id`. If an order ID from Merchant A arrives, it will never match or mutate a recovery case belonging to Merchant B.
+
+6. **Audit Trail**:
+   - Emits structured `RECOVERY_PAYMENT_RECONCILED` audit logs containing authoritative recovery metadata (case ID, payment ID, razorpay payment ID, reconciled attempt IDs, recovered amount) with zero credentials or sensitive payload secrets.
 
 
 

@@ -30,5 +30,7 @@ public interface PaymentRepository extends JpaRepository<Payment, UUID> {
 
     List<Payment> findByRazorpayOrderId(String razorpayOrderId);
 
+    List<Payment> findByMerchantIdAndRazorpayOrderId(UUID merchantId, String razorpayOrderId);
+
     boolean existsByMerchantIdAndRazorpayPaymentId(UUID merchantId, String razorpayPaymentId);
 }

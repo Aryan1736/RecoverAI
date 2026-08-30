@@ -27,6 +27,8 @@ public interface RecoveryExecutionQueueRepository extends JpaRepository<Recovery
 
     Optional<RecoveryExecutionQueueItem> findByIdAndMerchantId(UUID id, UUID merchantId);
 
+    List<RecoveryExecutionQueueItem> findByRecoveryCaseIdAndMerchantId(UUID recoveryCaseId, UUID merchantId);
+
     List<RecoveryExecutionQueueItem> findByMerchantId(UUID merchantId);
 
     List<RecoveryExecutionQueueItem> findByMerchantIdAndStatus(UUID merchantId, RecoveryQueueStatus status);
@@ -57,6 +59,19 @@ public interface RecoveryExecutionQueueRepository extends JpaRepository<Recovery
             "q.completedAt = :now, q.updatedAt = :now " +
             "WHERE q.id = :id AND (q.status = com.recoverai.backend.entity.enums.RecoveryQueueStatus.PROCESSING OR q.status = com.recoverai.backend.entity.enums.RecoveryQueueStatus.CLAIMED OR q.status = com.recoverai.backend.entity.enums.RecoveryQueueStatus.READY)")
     int markCompleted(@Param("id") UUID id, @Param("now") Instant now);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("UPDATE RecoveryExecutionQueueItem q SET q.status = com.recoverai.backend.entity.enums.RecoveryQueueStatus.COMPLETED, " +
+            "q.completedAt = :now, q.lastErrorCode = :resultCode, q.lastErrorMessage = :resultMessage, q.updatedAt = :now " +
+            "WHERE q.recoveryCase.id = :caseId AND q.merchant.id = :merchantId " +
+            "AND (q.status = com.recoverai.backend.entity.enums.RecoveryQueueStatus.READY " +
+            "OR q.status = com.recoverai.backend.entity.enums.RecoveryQueueStatus.CLAIMED " +
+            "OR q.status = com.recoverai.backend.entity.enums.RecoveryQueueStatus.PROCESSING)")
+    int markPendingItemsCompletedForCase(@Param("caseId") UUID caseId,
+                                         @Param("merchantId") UUID merchantId,
+                                         @Param("resultCode") String resultCode,
+                                         @Param("resultMessage") String resultMessage,
+                                         @Param("now") Instant now);
 
     @Modifying
     @Query("UPDATE RecoveryExecutionQueueItem q SET q.status = com.recoverai.backend.entity.enums.RecoveryQueueStatus.READY, " +

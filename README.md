@@ -1521,6 +1521,197 @@ POST /api/v1/merchants/{merchantId}/recovery-queue/dead-letter/{id}/redrive
 
 - **`V12__create_recovery_dlq_indexes.sql`**: Adds composite index `idx_recovery_queue_dlq_lookup` on `recovery_execution_queue(merchant_id, status, created_at DESC)` for sub-millisecond DLQ listing and filtering under heavy loads.
 
+---
+
+## 18. Merchant Alert & Notification Subsystem (PR #18)
+
+RecoverAI provides an enterprise-grade merchant alert and notification subsystem that delivers mission-critical lifecycle events to merchants across multiple channels (**Email**, **Webhook**, and **In-App**). The notification engine is designed for high reliability, strict multi-tenant isolation, cryptographically signed webhooks, and idempotent, non-blocking delivery.
+
+### 1. Architectural Overview
+
+- **Decoupled Asynchronous Dispatch**: All merchant notifications are dispatched in isolated transaction contexts (`Propagation.REQUIRES_NEW`) and wrapped in resilience boundaries. Failures or timeouts in email dispatch, outbound HTTP webhooks, or notification stores **never** compromise or roll back core payment reconciliation, queue processing, or recovery execution transactions.
+- **Pluggable Channel Providers**: A modular `NotificationChannelSender` interface governs delivery across channels (`EMAIL`, `WEBHOOK`, `IN_APP`).
+- **Deterministic Payload Generation**: Outbound payloads are strictly structured DTOs containing contextual recovery data (case ID, recovery amount, currency, channel, attempt number, failure code) with zero sensitive credentials or gateway secrets.
+- **Idempotency & Deduplication**: Outbound notifications compute deterministic idempotency keys (`<EVENT>:<CASE_ID>:<EXTRA>`) and unique composite indexes to prevent duplicate alerts during retry storms or redundant webhook reconciliations.
+
+```mermaid
+flowchart TD
+    A[Lifecycle Events<br/>Reconciliation / Queue / Health] -->|Async / REQUIRES_NEW| B(MerchantNotificationService)
+    B --> C{Idempotency Check<br/>& Deduplication}
+    C -->|Duplicate| D[Suppress Duplicate Dispatch]
+    C -->|New Event| E[Persist Notification Entity]
+    E --> F[Merchant Preference Engine]
+    F --> G{Channel Enabled?}
+    G -->|Email Enabled| H[EmailNotificationChannelSender<br/>Delegates to EmailProvider]
+    G -->|Webhook Enabled| I[WebhookNotificationChannelSender<br/>HMAC-SHA256 Signed POST]
+    G -->|In-App Enabled| J[InAppNotificationChannelSender<br/>Immediate UNREAD Entry]
+    H --> K[Update NotificationDelivery Status]
+    I --> K
+    J --> K
+    K --> L[Audit Trail Event]
+```
+
+### 2. Supported Lifecycle Events
+
+| Event Type | Trigger Origin | Default Channels | Description |
+| :--- | :--- | :--- | :--- |
+| `PAYMENT_RECOVERED` | `PaymentReconciliationService.reconcileCaseRecovery` | `EMAIL`, `WEBHOOK`, `IN_APP` | Triggered immediately upon payment capture and closed-loop case recovery. Deduplicated per recovery case. |
+| `CASE_EXHAUSTED` | `RecoveryExecutionQueueService.triggerStrategyFallbackIfEligible` | `EMAIL`, `IN_APP` | Triggered when a recovery case reaches maximum recovery attempts or all fallback channels are exhausted. |
+| `HIGH_PRIORITY_FAILURE` | `RecoveryExecutionQueueService.handleProcessingFailure` | `EMAIL`, `IN_APP` | Triggered when a recovery attempt fails permanently or transitions to dead-letter for `HIGH` or `CRITICAL` priority cases. |
+| `PROVIDER_DEGRADED` | `ProviderHealthAlertService.checkAndAlertDegradedProviders` | `EMAIL`, `IN_APP` | Triggered when communication or payment providers degrade. Governed by a configurable cooldown period (default 30 min) to prevent alert storms. |
+
+### 3. Channel Implementations
+
+1. **Email Channel (`EMAIL`)**:
+   - Delegates directly to existing `EmailProvider` implementations (SendGrid / SMTP / Mock).
+   - Formats localized merchant recovery notifications containing recovery amounts, currencies, customer reference masks, and case summaries.
+   - Automatically maps provider failures (`RATE_LIMITED`, `AUTHENTICATION`, `NETWORK_TIMEOUT`) into retryable or permanent delivery statuses.
+
+2. **Webhook Channel (`WEBHOOK`)**:
+   - Dispatches outbound HTTPS `POST` requests to merchant endpoints configured via `Merchant.webhookUrl`.
+   - Built with `ProviderHttpClientFactory` utilizing pooled, timeout-bounded HTTP clients.
+   - Signs payloads using **HMAC-SHA256** with the merchant's private `webhook_secret`. The signature is transmitted in the `X-RecoverAI-Signature` HTTP header.
+   - Classifies HTTP response status codes: `2xx` -> `DELIVERED`, `429`/`5xx`/timeout -> `RETRYING` (scheduled for exponential backoff), `4xx` -> `FAILED` (permanent client error).
+   - Skips delivery safely if merchant has not configured a destination webhook URL.
+
+3. **In-App Notification Center (`IN_APP`)**:
+   - Persisted directly to the database with `UNREAD` status.
+   - Delivers instantly with zero external network overhead.
+   - Supports paginated viewing, filtering by read/unread status and event type, individual mark-as-read, and bulk mark-all-read.
+
+### 4. Webhook Security & Cryptographic Signing
+
+Outbound webhook payloads are signed deterministically to ensure integrity and authenticity:
+- **Header**: `X-RecoverAI-Signature: <hex_encoded_hmac_sha256>`
+- **Algorithm**: `HmacSHA256` computed over the exact UTF-8 raw JSON payload using the merchant's `webhook_secret`.
+- **Payload Schema**:
+```json
+{
+  "eventId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "eventType": "PAYMENT_RECOVERED",
+  "timestamp": "2026-08-30T14:00:00Z",
+  "merchantId": "71a3fc06-5188-46f7-b7e9-258668da6cf7",
+  "caseId": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+  "attemptId": "4a7f0532-6a75-4309-a1b7-a36c1e5502c3",
+  "title": "Payment Recovered",
+  "message": "Payment of 5000.00 INR successfully recovered.",
+  "data": {
+    "amount": 5000.00,
+    "currency": "INR",
+    "recoveredAt": "2026-08-30T14:00:00Z"
+  }
+}
+```
+
+### 5. Notification API Endpoints Catalog
+
+#### A. In-App Notification Center
+```http
+GET /api/v1/notifications?page=0&size=20&unreadOnly=false&event=PAYMENT_RECOVERED
+GET /api/v1/merchants/{merchantId}/notifications
+```
+- Retrieves paginated list of notifications sorted by creation date descending.
+- Filterable by `unreadOnly` (boolean) and `event` (`MerchantNotificationEvent`).
+- Strictly enforces tenant boundaries; returns `401 Unauthorized` if missing token, `403 Forbidden` if tenant mismatch.
+
+```http
+GET /api/v1/notifications/{id}
+GET /api/v1/merchants/{merchantId}/notifications/{id}
+```
+- Retrieves specific notification details including all channel delivery attempts (`deliveries`).
+- Returns `404 Not Found` for nonexistent items or cross-tenant access.
+
+```http
+PATCH /api/v1/notifications/{id}/read
+PATCH /api/v1/merchants/{merchantId}/notifications/{id}/read
+```
+- Marks a single notification as `READ` with timestamp recording.
+
+```http
+PATCH /api/v1/notifications/read-all
+PATCH /api/v1/merchants/{merchantId}/notifications/read-all
+```
+- Atomically marks all unread notifications for the merchant as `READ`.
+- Returns `{ "merchantId": "...", "markedReadCount": 5, "success": true }`.
+
+#### B. Notification Preferences Management
+```http
+GET /api/v1/notification-preferences
+GET /api/v1/merchants/{merchantId}/notification-preferences
+```
+- Returns the merchant's configured webhook URL and preferences matrix per event and channel.
+- Automatically supplies safe defaults if the merchant has not customized specific preferences.
+
+```http
+PUT /api/v1/notification-preferences
+PUT /api/v1/merchants/{merchantId}/notification-preferences
+PATCH /api/v1/notification-preferences
+```
+- Updates destination `webhookUrl` and channel enable/disable toggles per event type:
+```json
+{
+  "webhookUrl": "https://api.merchant.com/webhooks/recoverai",
+  "preferences": {
+    "PAYMENT_RECOVERED": {
+      "EMAIL": true,
+      "WEBHOOK": true,
+      "IN_APP": true
+    },
+    "CASE_EXHAUSTED": {
+      "EMAIL": true,
+      "WEBHOOK": false,
+      "IN_APP": true
+    }
+  }
+}
+```
+
+### 6. Reliability & Delivery Retry Mechanism
+
+- **Retry Scheduler**: Background delivery runner retries `RETRYING` deliveries up to `maxRetries` (default 3) using exponential backoff:
+  $$\text{delay} = \min(\text{baseDelay} \times 2^{\text{retryCount}}, \text{maxDelay})$$
+- **Bounded Retries**: Once `retryCount >= maxRetries`, delivery status permanently transitions to `FAILED` with failure codes (`HTTP_500`, `CONNECTION_TIMEOUT`, etc.).
+- **Cooldown Deduplication**: Provider degradation notifications enforce an in-memory sliding cooldown window (default 1800 seconds / 30 minutes) per provider name to eliminate alert storms.
+
+### 7. Audit Event Catalog
+
+| Event Type | Actor Type | Trigger Description |
+| :--- | :--- | :--- |
+| `NOTIFICATION_DISPATCHED` | `SYSTEM` | Notification entity created and channel deliveries dispatched. |
+| `NOTIFICATION_DELIVERED` | `SYSTEM` | Channel delivery completed successfully (`DELIVERED`). |
+| `NOTIFICATION_DELIVERY_FAILED` | `SYSTEM` | Channel delivery permanently failed or exhausted retries (`FAILED`). |
+| `NOTIFICATION_READ` | `USER` | Merchant user marked an in-app notification as read. |
+| `NOTIFICATION_READ_ALL` | `USER` | Merchant user marked all unread notifications as read in bulk. |
+| `NOTIFICATION_PREFERENCES_UPDATED` | `USER` | Merchant updated notification preferences or destination webhook URL. |
+
+### 8. Configuration Properties
+
+All notification engine settings are configurable in `application.yml` under `recoverai.notifications`:
+
+```yaml
+recoverai:
+  notifications:
+    enabled: true
+    webhook:
+      connect-timeout-ms: 5000
+      read-timeout-ms: 10000
+      max-retries: 3
+      signature-header: "X-RecoverAI-Signature"
+    retry:
+      base-delay-seconds: 60
+      max-delay-seconds: 3600
+    alert-cooldown-seconds: 1800 # 30 minutes
+```
+
+### 9. Database Migrations (Flyway V13)
+
+- **`V13__create_merchant_notifications_schema.sql`**:
+  - `ALTER TABLE merchants ADD COLUMN IF NOT EXISTS webhook_url VARCHAR(1000);`
+  - `CREATE TABLE merchant_notification_preferences`: Multi-tenant preferences store with unique constraint on `(merchant_id, event_type, channel)`.
+  - `CREATE TABLE notifications`: Central merchant notifications store with indexes on `(merchant_id, status, created_at DESC)` and `(merchant_id, idempotency_key)`.
+  - `CREATE TABLE notification_deliveries`: Detailed delivery ledger per channel tracking delivery status, retry count, error codes, and provider message IDs.
+
+
 
 
 

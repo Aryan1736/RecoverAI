@@ -73,6 +73,7 @@ public class RecoveryExecutionQueueService {
     private final RecoveryQueueProperties properties;
     private final RecoveryCommunicationProperties communicationProperties;
     private final RecoveryStrategyProperties strategyProperties;
+    private final com.recoverai.backend.service.notification.MerchantNotificationService notificationService;
 
     @Autowired(required = false)
     @org.springframework.context.annotation.Lazy
@@ -86,7 +87,7 @@ public class RecoveryExecutionQueueService {
                                          AuditService auditService,
                                          RecoveryQueueProperties properties) {
         this(queueRepository, recoveryAttemptRepository, recoveryCaseRepository,
-                actionExecutors, defaultActionExecutor, auditService, properties, null, null);
+                actionExecutors, defaultActionExecutor, auditService, properties, null, null, null);
     }
 
     public RecoveryExecutionQueueService(RecoveryExecutionQueueRepository queueRepository,
@@ -98,7 +99,20 @@ public class RecoveryExecutionQueueService {
                                          RecoveryQueueProperties properties,
                                          RecoveryCommunicationProperties communicationProperties) {
         this(queueRepository, recoveryAttemptRepository, recoveryCaseRepository,
-                actionExecutors, defaultActionExecutor, auditService, properties, communicationProperties, null);
+                actionExecutors, defaultActionExecutor, auditService, properties, communicationProperties, null, null);
+    }
+
+    public RecoveryExecutionQueueService(RecoveryExecutionQueueRepository queueRepository,
+                                         RecoveryAttemptRepository recoveryAttemptRepository,
+                                         RecoveryCaseRepository recoveryCaseRepository,
+                                         List<RecoveryActionExecutor> actionExecutors,
+                                         DefaultRecoveryActionExecutor defaultActionExecutor,
+                                         AuditService auditService,
+                                         RecoveryQueueProperties properties,
+                                         RecoveryCommunicationProperties communicationProperties,
+                                         RecoveryStrategyProperties strategyProperties) {
+        this(queueRepository, recoveryAttemptRepository, recoveryCaseRepository,
+                actionExecutors, defaultActionExecutor, auditService, properties, communicationProperties, strategyProperties, null);
     }
 
     @Autowired
@@ -110,7 +124,8 @@ public class RecoveryExecutionQueueService {
                                          AuditService auditService,
                                          RecoveryQueueProperties properties,
                                          @Autowired(required = false) RecoveryCommunicationProperties communicationProperties,
-                                         @Autowired(required = false) RecoveryStrategyProperties strategyProperties) {
+                                         @Autowired(required = false) RecoveryStrategyProperties strategyProperties,
+                                         @Autowired(required = false) com.recoverai.backend.service.notification.MerchantNotificationService notificationService) {
         this.queueRepository = queueRepository;
         this.recoveryAttemptRepository = recoveryAttemptRepository;
         this.recoveryCaseRepository = recoveryCaseRepository;
@@ -120,6 +135,7 @@ public class RecoveryExecutionQueueService {
         this.properties = properties != null ? properties : new RecoveryQueueProperties();
         this.communicationProperties = communicationProperties;
         this.strategyProperties = strategyProperties != null ? strategyProperties : new RecoveryStrategyProperties();
+        this.notificationService = notificationService;
     }
 
     public RecoveryExecutionQueueItem enqueueAttempt(RecoveryAttempt attempt, Instant availableAt) {
@@ -671,6 +687,19 @@ public class RecoveryExecutionQueueService {
                 );
             }
 
+            // Dispatch HIGH_PRIORITY_FAILURE notification if case priority is HIGH or CRITICAL
+            RecoveryCase recoveryCase = queueItem.getRecoveryCase();
+            if (notificationService != null && recoveryCase != null
+                    && (recoveryCase.getPriority() == com.recoverai.backend.entity.enums.RecoveryPriority.HIGH
+                    || recoveryCase.getPriority() == com.recoverai.backend.entity.enums.RecoveryPriority.CRITICAL)) {
+                try {
+                    notificationService.notifyHighPriorityFailure(merchant, recoveryCase, attempt, errorMessage);
+                } catch (Exception notifEx) {
+                    log.error("Failed to dispatch HIGH_PRIORITY_FAILURE notification for case {}: {}",
+                            recoveryCase.getId(), notifEx.getMessage());
+                }
+            }
+
             // Trigger deterministic Strategy Fallback
             triggerStrategyFallbackIfEligible(queueItem, attempt, merchant, errorCode, errorMessage);
         }
@@ -734,6 +763,17 @@ public class RecoveryExecutionQueueService {
                             maxAttempts, recoveryCase.getId()),
                     null
             );
+
+            if (notificationService != null) {
+                try {
+                    notificationService.notifyCaseExhausted(merchant, recoveryCase,
+                            String.format("Maximum recovery attempts (%d) reached", maxAttempts));
+                } catch (Exception notifEx) {
+                    log.error("Failed to dispatch CASE_EXHAUSTED notification for case {}: {}",
+                            recoveryCase.getId(), notifEx.getMessage());
+                }
+            }
+
             return;
         }
 
@@ -807,6 +847,18 @@ public class RecoveryExecutionQueueService {
                             recoveryCase.getId(), hasPhone, hasEmail),
                     null
             );
+
+            if (notificationService != null) {
+                try {
+                    notificationService.notifyCaseExhausted(merchant, recoveryCase,
+                            String.format("All fallback channels exhausted (phoneAvailable=%s, emailAvailable=%s)",
+                                    hasPhone, hasEmail));
+                } catch (Exception notifEx) {
+                    log.error("Failed to dispatch CASE_EXHAUSTED notification for case {}: {}",
+                            recoveryCase.getId(), notifEx.getMessage());
+                }
+            }
+
             return;
         }
 

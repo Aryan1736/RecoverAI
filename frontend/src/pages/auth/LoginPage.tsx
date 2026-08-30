@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Zap, ShieldCheck, ArrowRight, Lock, Mail } from 'lucide-react';
+import { Zap, ShieldCheck, ArrowRight, Lock, Mail, Sparkles, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
+import { useDemoMode } from '../../hooks/useDemoMode';
 import { useToast } from '../../hooks/useToast';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -12,6 +13,7 @@ import { getHumanReadableErrorMessage } from '../../types/api';
 export function LoginPage() {
   const navigate = useNavigate();
   const { login, sessionExpiredMessage, clearSessionExpiredMessage } = useAuth();
+  const { enterDemoMode } = useDemoMode();
   const { toast } = useToast();
 
   const [email, setEmail] = useState('');
@@ -20,6 +22,12 @@ export function LoginPage() {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleLaunchDemo = () => {
+    enterDemoMode();
+    toast.success('Entering interactive demo environment');
+    navigate('/app');
+  };
 
   const validateForm = (): boolean => {
     let isValid = true;
@@ -139,7 +147,7 @@ export function LoginPage() {
               type="submit"
               variant="primary"
               size="md"
-              className="w-full mt-2"
+              className="w-full mt-2 cursor-pointer"
               isLoading={isSubmitting}
               rightIcon={<ArrowRight className="w-4 h-4" />}
             >
@@ -155,6 +163,52 @@ export function LoginPage() {
             >
               Register your business
             </Link>
+          </div>
+        </div>
+
+        {/* Divider */}
+        <div className="relative my-6 text-center text-xs">
+          <div className="absolute inset-0 flex items-center" aria-hidden="true">
+            <div className="w-full border-t border-slate-800" />
+          </div>
+          <span className="relative bg-slate-950 px-3 text-slate-400 font-medium">
+            or explore without credentials
+          </span>
+        </div>
+
+        {/* Interactive Demo Mode Card */}
+        <div className="bg-gradient-to-br from-indigo-950/70 via-slate-900/90 to-purple-950/50 border border-indigo-500/30 backdrop-blur-xl rounded-2xl p-5 sm:p-6 shadow-2xl space-y-4 relative overflow-hidden">
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-1">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                <Sparkles className="w-3 h-3 text-indigo-400" />
+                Interactive Sandbox
+              </div>
+              <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">
+                Try Interactive Demo
+              </h2>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                Explore RecoverAI with a preloaded demo environment. Inspect simulated recovery cases, autonomous AI diagnosis, analytics, and recovery workflows without creating an account.
+              </p>
+            </div>
+          </div>
+
+          <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-t border-indigo-500/20">
+            <div className="flex items-center gap-1.5 text-[11px] text-indigo-200/90">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span>No account required • Simulated demo data</span>
+            </div>
+
+            <Button
+              type="button"
+              variant="primary"
+              size="md"
+              className="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold shadow-lg shadow-indigo-600/30 shrink-0 cursor-pointer"
+              onClick={handleLaunchDemo}
+              rightIcon={<ArrowRight className="w-4 h-4" />}
+            >
+              Try Interactive Demo
+            </Button>
           </div>
         </div>
 

@@ -158,6 +158,31 @@ frontend/src/
 
 ---
 
+## PR #23: Interactive Demo Mode Architecture
+
+RecoverAI provides an instantaneous, frictionless "Try Interactive Demo" mode designed for evaluators, judges, and prospects to experience the entire merchant recovery portal without registering an account or entering credentials.
+
+### Key Architectural Principles
+1. **Frontend-Only Isolation**: Demo mode operates strictly on the client side via `DemoProvider` (`context/DemoContext.tsx`) and `api/demo.ts`.
+2. **Zero Backend Auth Bypass**: Demo mode does NOT create fake JWTs, bypass backend Spring Security filters, or send simulated requests to authenticated production endpoints.
+3. **Storage Separation**: Demo state is tracked purely via boolean flag `recoverai_demo_mode` in `localStorage`. The authoritative authentication tokens (`recoverai_token` and `recoverai_merchant`) remain null.
+4. **State Transitions**:
+   - **Unauthenticated Visitor**: `isAuthenticated = false, isDemoMode = false` -> redirected to `/login`.
+   - **Demo Evaluator**: `isAuthenticated = false, isDemoMode = true` -> permitted in `ProtectedRoute`, loads simulated fixtures from `api/demo.ts`.
+   - **Authenticated Merchant**: `isAuthenticated = true, isDemoMode = false` -> production merchant session with live Spring Boot backend. Real login automatically exits demo mode.
+5. **Entry Experience**: The `/login` page offers a prominent "Try Interactive Demo" CTA card ("No account required • Simulated demo data") positioned adjacent to standard merchant login, preserving keyboard accessibility and tab navigation.
+6. **Visual Indicators & Exit Flow**: When active, the application displays a persistent amber `DEMO MODE` badge (`role="status"`) in the top navigation header with an accessible "Exit Demo" action button that clears demo storage and redirects to `/login`.
+7. **Simulated Domain Telemetry**: `api/demo.ts` provides realistic, in-memory fixtures for all merchant workflows:
+   - Executive Dashboard KPI metrics and recent cases.
+   - Recovery Cases management with multi-status filtering, sorting, and pagination.
+   - Recovery Case Detail with autonomous Gemini 3.7 Flash diagnosis, fallback strategy timeline, and simulated cancellation.
+   - Analytics Overview, recovery trends multi-series chart, channel volume matrix, and failure root-cause distribution.
+   - Notification Center with unread badges, multi-channel deliveries modal, and simulated mark-as-read actions.
+   - Provider operational telemetry for WhatsApp, Email, SMS, and Payment Gateway.
+   - Notification delivery rules matrix and webhook configuration.
+
+---
+
 ## Setup & Commands
 
 ### Prerequisites
@@ -189,7 +214,7 @@ Development server runs at `http://localhost:5173`.
 ```bash
 npm test -- --run
 ```
-Executes all 100 Vitest unit, component, routing, analytics, recovery case, notification, preferences, and provider status test suites in headless JSDOM mode across 18 test files.
+Executes all 122 Vitest unit, component, routing, analytics, recovery case, notification, preferences, provider status, and interactive demo mode test suites in headless JSDOM mode across 19 test files.
 
 ### Production Build
 ```bash

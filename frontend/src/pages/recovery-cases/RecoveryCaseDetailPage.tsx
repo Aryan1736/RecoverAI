@@ -13,6 +13,8 @@ import {
   Layers,
 } from 'lucide-react';
 import { getRecoveryCase, cancelRecoveryCase } from '../../api/recovery-cases';
+import { getDemoRecoveryCase } from '../../api/demo';
+import { useDemoMode } from '../../hooks/useDemoMode';
 import type {
   RecoveryCaseDetail,
   RecoveryCaseStatus,
@@ -28,6 +30,7 @@ import { RecoveryTimeline } from '../../components/recovery-cases/RecoveryTimeli
 
 export function RecoveryCaseDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const { isDemoMode } = useDemoMode();
   const { toast } = useToast();
 
   const [caseDetail, setCaseDetail] = useState<RecoveryCaseDetail | null>(null);
@@ -43,7 +46,7 @@ export function RecoveryCaseDetailPage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await getRecoveryCase(id);
+      const data = isDemoMode ? await getDemoRecoveryCase(id) : await getRecoveryCase(id);
       setCaseDetail(data);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to load recovery case detail';
@@ -51,7 +54,7 @@ export function RecoveryCaseDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, isDemoMode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -61,7 +64,7 @@ export function RecoveryCaseDetailPage() {
       setLoading(true);
       setError(null);
       try {
-        const data = await getRecoveryCase(id);
+        const data = isDemoMode ? await getDemoRecoveryCase(id) : await getRecoveryCase(id);
         if (!cancelled) {
           setCaseDetail(data);
         }
@@ -82,12 +85,20 @@ export function RecoveryCaseDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, isDemoMode]);
 
   const handleCancelCase = async () => {
     if (!id) return;
     setIsCancelling(true);
     try {
+      if (isDemoMode) {
+        toast.info('Simulated in Demo Mode: case cancellation is simulated and not persisted.');
+        setCancelModalOpen(false);
+        if (caseDetail) {
+          setCaseDetail({ ...caseDetail, status: 'CANCELLED' });
+        }
+        return;
+      }
       await cancelRecoveryCase(id);
       toast.success('Recovery case was successfully cancelled');
       setCancelModalOpen(false);

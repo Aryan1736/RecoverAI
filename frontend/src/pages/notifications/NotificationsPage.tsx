@@ -20,6 +20,8 @@ import {
   markAsRead,
   markAllAsRead,
 } from '../../api/notifications';
+import { getDemoNotifications } from '../../api/demo';
+import { useDemoMode } from '../../hooks/useDemoMode';
 import type {
   NotificationResponseDto,
   MerchantNotificationEvent,
@@ -28,6 +30,7 @@ import type {
 const PAGE_SIZE = 10;
 
 export function NotificationsPage() {
+  const { isDemoMode } = useDemoMode();
   const { toast } = useToast();
 
   const [notifications, setNotifications] = useState<NotificationResponseDto[]>([]);
@@ -57,12 +60,14 @@ export function NotificationsPage() {
       const eventFilter =
         selectedEvent !== 'ALL' ? (selectedEvent as MerchantNotificationEvent) : undefined;
 
-      const response = await getNotifications({
-        page: currentPage,
-        size: PAGE_SIZE,
-        unreadOnly: unreadOnly ? true : undefined,
-        event: eventFilter,
-      });
+      const response = isDemoMode
+        ? await getDemoNotifications()
+        : await getNotifications({
+            page: currentPage,
+            size: PAGE_SIZE,
+            unreadOnly: unreadOnly ? true : undefined,
+            event: eventFilter,
+          });
 
       setNotifications(response.content || []);
       setTotalElements(response.totalElements || 0);
@@ -73,7 +78,7 @@ export function NotificationsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [currentPage, unreadOnly, selectedEvent]);
+  }, [currentPage, unreadOnly, selectedEvent, isDemoMode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -83,12 +88,14 @@ export function NotificationsPage() {
         const eventFilter =
           selectedEvent !== 'ALL' ? (selectedEvent as MerchantNotificationEvent) : undefined;
 
-        const response = await getNotifications({
-          page: currentPage,
-          size: PAGE_SIZE,
-          unreadOnly: unreadOnly ? true : undefined,
-          event: eventFilter,
-        });
+        const response = isDemoMode
+          ? await getDemoNotifications()
+          : await getNotifications({
+              page: currentPage,
+              size: PAGE_SIZE,
+              unreadOnly: unreadOnly ? true : undefined,
+              event: eventFilter,
+            });
 
         if (!cancelled) {
           setNotifications(response.content || []);
@@ -112,11 +119,21 @@ export function NotificationsPage() {
     return () => {
       cancelled = true;
     };
-  }, [currentPage, unreadOnly, selectedEvent]);
+  }, [currentPage, unreadOnly, selectedEvent, isDemoMode]);
 
   const handleMarkAsRead = async (id: string) => {
     setMarkingId(id);
     try {
+      if (isDemoMode) {
+        setNotifications((prev) =>
+          prev.map((item) => (item.id === id ? { ...item, read: true } : item))
+        );
+        if (selectedNotification && selectedNotification.id === id) {
+          setSelectedNotification({ ...selectedNotification, read: true });
+        }
+        toast.success('Notification marked as read (Simulated)');
+        return;
+      }
       const updated = await markAsRead(id);
       setNotifications((prev) =>
         prev.map((item) => (item.id === id ? updated : item))
@@ -136,6 +153,11 @@ export function NotificationsPage() {
   const handleMarkAllAsRead = async () => {
     setIsMarkingAll(true);
     try {
+      if (isDemoMode) {
+        setNotifications((prev) => prev.map((item) => ({ ...item, read: true })));
+        toast.success('Marked all notifications as read (Simulated)');
+        return;
+      }
       const result = await markAllAsRead();
       toast.success(`Marked ${result.markedReadCount} notifications as read`);
       await fetchNotifications();

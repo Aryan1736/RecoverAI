@@ -13,6 +13,13 @@ import {
   getChannelAnalytics,
   getFailureAnalytics,
 } from '../../api/analytics';
+import {
+  getDemoAnalyticsOverview,
+  getDemoRecoveryTrends,
+  getDemoChannelAnalytics,
+  getDemoFailureAnalytics,
+} from '../../api/demo';
+import { useDemoMode } from '../../hooks/useDemoMode';
 import type {
   AnalyticsOverview,
   RecoveryTrends,
@@ -31,6 +38,7 @@ import { ChannelAnalyticsCard } from '../../components/analytics/ChannelAnalytic
 import { FailureAnalyticsCard } from '../../components/analytics/FailureAnalyticsCard';
 
 export function AnalyticsPage() {
+  const { isDemoMode } = useDemoMode();
   const [dateRange, setDateRange] = useState<DateRangeParams>(() => {
     const now = new Date();
     const to = now.toISOString().split('T')[0];
@@ -51,12 +59,19 @@ export function AnalyticsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [overviewData, trendsData, channelsData, failuresData] = await Promise.all([
-        getAnalyticsOverview(range),
-        getRecoveryTrends(range),
-        getChannelAnalytics(range),
-        getFailureAnalytics(range),
-      ]);
+      const [overviewData, trendsData, channelsData, failuresData] = isDemoMode
+        ? await Promise.all([
+            getDemoAnalyticsOverview(range),
+            getDemoRecoveryTrends(range),
+            getDemoChannelAnalytics(range),
+            getDemoFailureAnalytics(range),
+          ])
+        : await Promise.all([
+            getAnalyticsOverview(range),
+            getRecoveryTrends(range),
+            getChannelAnalytics(range),
+            getFailureAnalytics(range),
+          ]);
 
       setOverview(overviewData);
       setTrends(trendsData);
@@ -68,7 +83,7 @@ export function AnalyticsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isDemoMode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,12 +92,19 @@ export function AnalyticsPage() {
       setLoading(true);
       setError(null);
       try {
-        const [overviewData, trendsData, channelsData, failuresData] = await Promise.all([
-          getAnalyticsOverview(dateRange),
-          getRecoveryTrends(dateRange),
-          getChannelAnalytics(dateRange),
-          getFailureAnalytics(dateRange),
-        ]);
+        const [overviewData, trendsData, channelsData, failuresData] = isDemoMode
+          ? await Promise.all([
+              getDemoAnalyticsOverview(dateRange),
+              getDemoRecoveryTrends(dateRange),
+              getDemoChannelAnalytics(dateRange),
+              getDemoFailureAnalytics(dateRange),
+            ])
+          : await Promise.all([
+              getAnalyticsOverview(dateRange),
+              getRecoveryTrends(dateRange),
+              getChannelAnalytics(dateRange),
+              getFailureAnalytics(dateRange),
+            ]);
 
         if (!cancelled) {
           setOverview(overviewData);
@@ -107,7 +129,7 @@ export function AnalyticsPage() {
     return () => {
       cancelled = true;
     };
-  }, [dateRange]);
+  }, [dateRange, isDemoMode]);
 
   const handleDateRangeChange = (newRange: DateRangeParams) => {
     setDateRange(newRange);

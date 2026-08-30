@@ -20,9 +20,11 @@ import {
   setStoredToken,
 } from '../api/client';
 import { login as apiLogin, register as apiRegister } from '../api/auth';
+import { useDemoMode } from '../hooks/useDemoMode';
 import { AuthContext } from './auth-context-def';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const { isDemoMode: demoModeActive, exitDemoMode } = useDemoMode();
   const [token, setToken] = useState<string | null>(() => {
     const t = getStoredToken();
     const m = getStoredMerchant();
@@ -54,6 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSessionExpiredMessage(null);
     try {
       const response = await apiLogin(credentials);
+      exitDemoMode();
       setStoredToken(response.token);
       setStoredMerchant(response.merchant);
       setToken(response.token);
@@ -62,7 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [exitDemoMode]);
 
   const register = useCallback(async (payload: RegisterRequest): Promise<Merchant> => {
     setIsLoading(true);
@@ -86,10 +89,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSessionExpiredMessage(null);
   }, []);
 
+  const isAuthenticated = Boolean(token && user);
+
   const value: AuthContextType = {
     user,
     token,
-    isAuthenticated: Boolean(token && user),
+    isAuthenticated,
+    isDemoMode: !isAuthenticated && demoModeActive,
     isLoading,
     sessionExpiredMessage,
     login,

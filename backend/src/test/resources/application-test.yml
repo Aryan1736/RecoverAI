@@ -21,6 +21,21 @@ management:
   endpoint:
     health:
       show-details: always
+      probes:
+        enabled: true
+      status:
+        order: DOWN, OUT_OF_SERVICE, DEGRADED, UP, UNKNOWN
+        http-mapping:
+          DEGRADED: 200
+    info:
+      enabled: true
+    metrics:
+      enabled: true
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
 
 cors:
   allowed-origins: http://localhost:5173,http://localhost:3000
@@ -43,6 +58,8 @@ recoverai:
       provider: mock
       sender-number: "+14155238886"
       api-key: test-whatsapp-key
+      account-sid: test-twilio-sid
+      auth-token: test-twilio-token
     email:
       provider: mock
       from-address: test-recover@recoverai.io
@@ -52,6 +69,8 @@ recoverai:
       provider: mock
       sender-id: TESTREC
       api-key: test-sms-key
+      account-sid: test-twilio-sid
+      auth-token: test-twilio-token
     retry-charge:
       provider: mock
       auto-retry-enabled: true
@@ -90,6 +109,22 @@ recoverai:
       secret: recoverai-test-jwt-signing-secret-key-must-be-at-least-256-bits-long
       expiration-ms: 3600000
       issuer: RecoverAITest
+  observability:
+    enabled: true
+    correlation-id:
+      enabled: true
+      header-name: X-Correlation-ID
+      max-length: 64
+    metrics:
+      enabled: true
+    queue-health:
+      enabled: true
+      max-dead-letter-items: 50
+      max-stale-claims: 10
+      max-ready-items: 1000
+    provider-health:
+      enabled: true
+      cache-ttl-seconds: 10
 
 
 

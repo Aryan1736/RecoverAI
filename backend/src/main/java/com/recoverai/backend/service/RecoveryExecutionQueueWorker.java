@@ -1,8 +1,10 @@
 package com.recoverai.backend.service;
 
 import com.recoverai.backend.config.RecoveryQueueProperties;
+import com.recoverai.backend.security.CorrelationIdFilter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -39,6 +41,8 @@ public class RecoveryExecutionQueueWorker {
 
     public int processDueQueueItems() {
         // 1. Crash recovery: requeue stale/abandoned claims
+        String staleCorrelationId = "worker-stale-" + UUID.randomUUID().toString().substring(0, 8);
+        MDC.put(CorrelationIdFilter.MDC_KEY, staleCorrelationId);
         try {
             int requeued = queueService.requeueStaleClaims();
             if (requeued > 0) {
@@ -46,6 +50,8 @@ public class RecoveryExecutionQueueWorker {
             }
         } catch (Exception ex) {
             log.error("Error during stale claim recovery: {}", ex.getMessage(), ex);
+        } finally {
+            MDC.remove(CorrelationIdFilter.MDC_KEY);
         }
 
         // 2. Find due READY queue items
@@ -61,6 +67,8 @@ public class RecoveryExecutionQueueWorker {
         int processedCount = 0;
 
         for (UUID itemId : dueItemIds) {
+            String itemCorrelationId = "worker-" + itemId.toString().substring(0, 8) + "-" + UUID.randomUUID().toString().substring(0, 8);
+            MDC.put(CorrelationIdFilter.MDC_KEY, itemCorrelationId);
             try {
                 // 3. Atomically claim
                 boolean claimed = queueService.claimItem(itemId, workerId);
@@ -76,6 +84,8 @@ public class RecoveryExecutionQueueWorker {
                 }
             } catch (Exception ex) {
                 log.error("Unhandled error processing queue item id={}: {}", itemId, ex.getMessage(), ex);
+            } finally {
+                MDC.remove(CorrelationIdFilter.MDC_KEY);
             }
         }
 

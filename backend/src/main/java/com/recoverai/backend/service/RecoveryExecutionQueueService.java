@@ -26,6 +26,7 @@ import com.recoverai.backend.service.executor.ExecutionResult;
 import com.recoverai.backend.service.executor.RecoveryActionExecutor;
 import com.recoverai.backend.service.provider.classification.ProviderErrorClassifier;
 import com.recoverai.backend.service.provider.classification.ProviderFailureType;
+import com.recoverai.backend.observability.RecoveryMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,22 +34,15 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-
-import java.time.Duration;
-import java.time.Instant;
-import java.util.EnumMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -74,6 +68,7 @@ public class RecoveryExecutionQueueService {
     private final RecoveryCommunicationProperties communicationProperties;
     private final RecoveryStrategyProperties strategyProperties;
     private final com.recoverai.backend.service.notification.MerchantNotificationService notificationService;
+    private final RecoveryMetrics recoveryMetrics;
 
     @Autowired(required = false)
     @org.springframework.context.annotation.Lazy
@@ -87,7 +82,7 @@ public class RecoveryExecutionQueueService {
                                          AuditService auditService,
                                          RecoveryQueueProperties properties) {
         this(queueRepository, recoveryAttemptRepository, recoveryCaseRepository,
-                actionExecutors, defaultActionExecutor, auditService, properties, null, null, null);
+                actionExecutors, defaultActionExecutor, auditService, properties, null, null, null, null);
     }
 
     public RecoveryExecutionQueueService(RecoveryExecutionQueueRepository queueRepository,
@@ -99,7 +94,7 @@ public class RecoveryExecutionQueueService {
                                          RecoveryQueueProperties properties,
                                          RecoveryCommunicationProperties communicationProperties) {
         this(queueRepository, recoveryAttemptRepository, recoveryCaseRepository,
-                actionExecutors, defaultActionExecutor, auditService, properties, communicationProperties, null, null);
+                actionExecutors, defaultActionExecutor, auditService, properties, communicationProperties, null, null, null);
     }
 
     public RecoveryExecutionQueueService(RecoveryExecutionQueueRepository queueRepository,
@@ -112,7 +107,21 @@ public class RecoveryExecutionQueueService {
                                          RecoveryCommunicationProperties communicationProperties,
                                          RecoveryStrategyProperties strategyProperties) {
         this(queueRepository, recoveryAttemptRepository, recoveryCaseRepository,
-                actionExecutors, defaultActionExecutor, auditService, properties, communicationProperties, strategyProperties, null);
+                actionExecutors, defaultActionExecutor, auditService, properties, communicationProperties, strategyProperties, null, null);
+    }
+
+    public RecoveryExecutionQueueService(RecoveryExecutionQueueRepository queueRepository,
+                                         RecoveryAttemptRepository recoveryAttemptRepository,
+                                         RecoveryCaseRepository recoveryCaseRepository,
+                                         List<RecoveryActionExecutor> actionExecutors,
+                                         DefaultRecoveryActionExecutor defaultActionExecutor,
+                                         AuditService auditService,
+                                         RecoveryQueueProperties properties,
+                                         RecoveryCommunicationProperties communicationProperties,
+                                         RecoveryStrategyProperties strategyProperties,
+                                         com.recoverai.backend.service.notification.MerchantNotificationService notificationService) {
+        this(queueRepository, recoveryAttemptRepository, recoveryCaseRepository,
+                actionExecutors, defaultActionExecutor, auditService, properties, communicationProperties, strategyProperties, notificationService, null);
     }
 
     @Autowired
@@ -125,7 +134,8 @@ public class RecoveryExecutionQueueService {
                                          RecoveryQueueProperties properties,
                                          @Autowired(required = false) RecoveryCommunicationProperties communicationProperties,
                                          @Autowired(required = false) RecoveryStrategyProperties strategyProperties,
-                                         @Autowired(required = false) com.recoverai.backend.service.notification.MerchantNotificationService notificationService) {
+                                         @Autowired(required = false) com.recoverai.backend.service.notification.MerchantNotificationService notificationService,
+                                         @Autowired(required = false) RecoveryMetrics recoveryMetrics) {
         this.queueRepository = queueRepository;
         this.recoveryAttemptRepository = recoveryAttemptRepository;
         this.recoveryCaseRepository = recoveryCaseRepository;
@@ -136,6 +146,29 @@ public class RecoveryExecutionQueueService {
         this.communicationProperties = communicationProperties;
         this.strategyProperties = strategyProperties != null ? strategyProperties : new RecoveryStrategyProperties();
         this.notificationService = notificationService;
+        this.recoveryMetrics = recoveryMetrics;
+    }
+
+    private String resolveProviderName(RecoveryChannel channel) {
+        if (channel == null || communicationProperties == null) {
+            return "DEFAULT";
+        }
+        try {
+            return switch (channel) {
+                case WHATSAPP -> communicationProperties.getWhatsapp() != null && communicationProperties.getWhatsapp().getProvider() != null
+                        ? communicationProperties.getWhatsapp().getProvider() : "WHATSAPP_DEFAULT";
+                case EMAIL -> communicationProperties.getEmail() != null && communicationProperties.getEmail().getProvider() != null
+                        ? communicationProperties.getEmail().getProvider() : "EMAIL_DEFAULT";
+                case SMS -> communicationProperties.getSms() != null && communicationProperties.getSms().getProvider() != null
+                        ? communicationProperties.getSms().getProvider() : "SMS_DEFAULT";
+                case RETRY_CHARGE -> communicationProperties.getRetryCharge() != null && communicationProperties.getRetryCharge().getProvider() != null
+                        ? communicationProperties.getRetryCharge().getProvider() : "RETRY_CHARGE_DEFAULT";
+                case SMART_LINK -> "SMART_LINK";
+                case MANUAL -> "MANUAL";
+            };
+        } catch (Exception ex) {
+            return "UNKNOWN";
+        }
     }
 
     public RecoveryExecutionQueueItem enqueueAttempt(RecoveryAttempt attempt, Instant availableAt) {
@@ -220,6 +253,9 @@ public class RecoveryExecutionQueueService {
         int updatedRows = queueRepository.claimItem(queueItemId, effectiveWorkerId, now);
         if (updatedRows > 0) {
             log.info("Queue item id={} claimed by worker={}", queueItemId, effectiveWorkerId);
+            if (recoveryMetrics != null) {
+                recoveryMetrics.recordQueueClaim();
+            }
 
             Optional<RecoveryExecutionQueueItem> itemOpt = queueRepository.findById(queueItemId);
             itemOpt.ifPresent(item -> auditService.recordEvent(
@@ -262,18 +298,30 @@ public class RecoveryExecutionQueueService {
         if (merchant == null || attempt == null || recoveryCase == null) {
             log.error("Corrupted queue item id={}: missing merchant, attempt, or case", queueItemIdStr);
             queueRepository.moveToDeadLetter(queueItemId, "CORRUPTED_QUEUE_ITEM", "Missing relationship references", Instant.now());
+            if (recoveryMetrics != null) {
+                recoveryMetrics.recordQueueDeadLetter(ProviderFailureType.VALIDATION);
+                recoveryMetrics.recordQueueProcessingFailure();
+            }
             return false;
         }
 
         if (attempt.getMerchant() == null || !attempt.getMerchant().getId().equals(merchant.getId())) {
             log.error("Cross-tenant violation: attempt merchant does not match queue item merchant for id={}", queueItemIdStr);
             queueRepository.moveToDeadLetter(queueItemId, "TENANT_MISMATCH", "Attempt merchant mismatch", Instant.now());
+            if (recoveryMetrics != null) {
+                recoveryMetrics.recordQueueDeadLetter(ProviderFailureType.VALIDATION);
+                recoveryMetrics.recordQueueProcessingFailure();
+            }
             return false;
         }
 
         if (recoveryCase.getMerchant() == null || !recoveryCase.getMerchant().getId().equals(merchant.getId())) {
             log.error("Cross-tenant violation: case merchant does not match queue item merchant for id={}", queueItemIdStr);
             queueRepository.moveToDeadLetter(queueItemId, "TENANT_MISMATCH", "Case merchant mismatch", Instant.now());
+            if (recoveryMetrics != null) {
+                recoveryMetrics.recordQueueDeadLetter(ProviderFailureType.VALIDATION);
+                recoveryMetrics.recordQueueProcessingFailure();
+            }
             return false;
         }
 
@@ -292,6 +340,10 @@ public class RecoveryExecutionQueueService {
             recoveryAttemptRepository.save(attempt);
 
             queueRepository.markCompleted(queueItemId, now);
+
+            if (recoveryMetrics != null) {
+                recoveryMetrics.recordAttemptSkipped(attempt.getChannel());
+            }
 
             auditService.recordEvent(
                     merchant,
@@ -338,6 +390,10 @@ public class RecoveryExecutionQueueService {
         attempt.setExecutedAt(now);
         recoveryAttemptRepository.save(attempt);
 
+        if (recoveryMetrics != null) {
+            recoveryMetrics.recordAttemptStarted(attempt.getChannel());
+        }
+
         if (recoveryCase.getStatus() == RecoveryCaseStatus.OPEN) {
             recoveryCase.setStatus(RecoveryCaseStatus.IN_PROGRESS);
             recoveryCaseRepository.save(recoveryCase);
@@ -369,6 +425,8 @@ public class RecoveryExecutionQueueService {
         );
 
         // 5. Execute via channel-specific Action Executor (using authoritative strategy snapshot persisted on attempt)
+        String providerName = resolveProviderName(attempt.getChannel());
+        Instant dispatchStart = Instant.now();
         try {
             auditService.recordEvent(
                     merchant,
@@ -383,9 +441,24 @@ public class RecoveryExecutionQueueService {
             );
 
             RecoveryActionExecutor executor = findExecutor(attempt.getChannel());
-            ExecutionResult result = executor.execute(attempt, recoveryCase);
+            ExecutionResult result;
+            try {
+                result = executor.execute(attempt, recoveryCase);
+            } catch (Exception ex) {
+                Duration duration = Duration.between(dispatchStart, Instant.now());
+                if (recoveryMetrics != null) {
+                    recoveryMetrics.recordProviderDispatchDuration(providerName, attempt.getChannel(), "ERROR", duration);
+                }
+                throw ex;
+            }
 
             Instant completionTime = Instant.now();
+            Duration duration = Duration.between(dispatchStart, completionTime);
+            String statusStr = result.getStatus() != null ? result.getStatus().name() : "UNKNOWN";
+            if (recoveryMetrics != null) {
+                recoveryMetrics.recordProviderDispatchDuration(providerName, attempt.getChannel(), statusStr, duration);
+            }
+
             attempt.setStatus(result.getStatus());
             attempt.setCompletedAt(completionTime);
             attempt.setResultCode(result.getResultCode());
@@ -404,6 +477,9 @@ public class RecoveryExecutionQueueService {
                 recoveryCaseRepository.save(recoveryCase);
                 log.info("RecoveryCase id={} marked as RECOVERED after successful queue attempt id={}",
                         recoveryCase.getId(), attemptIdStr);
+                if (recoveryMetrics != null) {
+                    recoveryMetrics.recordCaseRecovered(attempt.getChannel());
+                }
             }
 
             recoveryAttemptRepository.save(attempt);
@@ -413,6 +489,11 @@ public class RecoveryExecutionQueueService {
                     || result.getStatus() == RecoveryAttemptStatus.DELIVERED) {
 
                 queueRepository.markCompleted(queueItemId, completionTime);
+
+                if (recoveryMetrics != null) {
+                    recoveryMetrics.recordAttemptSucceeded(attempt.getChannel());
+                    recoveryMetrics.recordProviderDispatchSuccess(providerName, attempt.getChannel());
+                }
 
                 auditService.recordEvent(
                         merchant,
@@ -462,6 +543,10 @@ public class RecoveryExecutionQueueService {
 
             } else if (result.getStatus() == RecoveryAttemptStatus.SKIPPED) {
                 queueRepository.markCompleted(queueItemId, completionTime);
+                if (recoveryMetrics != null) {
+                    recoveryMetrics.recordAttemptSkipped(attempt.getChannel());
+                }
+
                 auditService.recordEvent(
                         merchant,
                         "RECOVERY_EXECUTION_SKIPPED",
@@ -480,6 +565,15 @@ public class RecoveryExecutionQueueService {
                         ? result.getFailureType()
                         : ProviderErrorClassifier.classifyResultCode(result.getResultCode());
                 boolean isRetryable = ProviderErrorClassifier.isRetryable(failureType);
+
+                if (recoveryMetrics != null) {
+                    recoveryMetrics.recordProviderDispatchFailure(providerName, attempt.getChannel(), failureType);
+                    if (isRetryable) {
+                        recoveryMetrics.recordProviderDispatchRetryableFailure(providerName, attempt.getChannel(), failureType);
+                    } else {
+                        recoveryMetrics.recordProviderDispatchPermanentFailure(providerName, attempt.getChannel(), failureType);
+                    }
+                }
 
                 auditService.recordEvent(
                         merchant,
@@ -542,6 +636,15 @@ public class RecoveryExecutionQueueService {
             ProviderFailureType failureType = ProviderErrorClassifier.classifyException(ex);
             boolean isTransient = isTransientError(null, ex.getMessage(), ex) || ProviderErrorClassifier.isRetryable(failureType);
 
+            if (recoveryMetrics != null) {
+                recoveryMetrics.recordProviderDispatchFailure(providerName, attempt.getChannel(), failureType);
+                if (isTransient) {
+                    recoveryMetrics.recordProviderDispatchRetryableFailure(providerName, attempt.getChannel(), failureType);
+                } else {
+                    recoveryMetrics.recordProviderDispatchPermanentFailure(providerName, attempt.getChannel(), failureType);
+                }
+            }
+
             auditService.recordEvent(
                     merchant,
                     "RECOVERY_PROVIDER_DISPATCH_FAILED",
@@ -597,6 +700,10 @@ public class RecoveryExecutionQueueService {
         String queueItemIdStr = queueItemId.toString();
         String attemptIdStr = attempt.getId() != null ? attempt.getId().toString() : "UNKNOWN";
 
+        if (recoveryMetrics != null) {
+            recoveryMetrics.recordQueueProcessingFailure();
+        }
+
         int currentRetry = queueItem.getRetryCount();
         int maxRetries = queueItem.getMaxRetries();
 
@@ -605,6 +712,10 @@ public class RecoveryExecutionQueueService {
             Instant nextAvailableAt = now.plusSeconds(delaySec);
 
             queueRepository.rescheduleForRetry(queueItemId, nextAvailableAt, errorCode, errorMessage, now);
+
+            if (recoveryMetrics != null) {
+                recoveryMetrics.recordQueueRetry();
+            }
 
             // Revert attempt back to SCHEDULED with scheduledAt = nextAvailableAt so attempt identity remains stable
             attempt.setStatus(RecoveryAttemptStatus.SCHEDULED);
@@ -634,6 +745,12 @@ public class RecoveryExecutionQueueService {
             String eventType = exhausted ? "RECOVERY_EXECUTION_DEAD_LETTERED" : "RECOVERY_EXECUTION_FAILED";
 
             queueRepository.moveToDeadLetter(queueItemId, errorCode, errorMessage, now);
+
+            ProviderFailureType failureType = ProviderErrorClassifier.classifyResultCode(errorCode);
+            if (recoveryMetrics != null) {
+                recoveryMetrics.recordQueueDeadLetter(failureType);
+                recoveryMetrics.recordAttemptFailed(attempt.getChannel(), failureType);
+            }
 
             attempt.setStatus(RecoveryAttemptStatus.FAILED);
             attempt.setCompletedAt(now);

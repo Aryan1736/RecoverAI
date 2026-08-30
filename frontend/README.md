@@ -26,12 +26,15 @@ frontend/src/
 │   ├── auth.ts                   # Login, registration, and backend health check API calls
 │   ├── dashboard.ts              # Dashboard overview metrics API call
 │   ├── analytics.ts              # PR #21 Analytics APIs (overview, trends, failures, channels, attempts)
-│   └── recovery-cases.ts         # PR #21 Recovery Cases APIs (list, detail, attempts, cancellation)
+│   ├── recovery-cases.ts         # PR #21 Recovery Cases APIs (list, detail, attempts, cancellation)
+│   ├── notifications.ts          # PR #22 Notification APIs (list, get, mark read, mark all read, unread count)
+│   ├── notification-preferences.ts # PR #22 Preference APIs (get preferences, update preferences matrix, webhook URL)
+│   └── providers.ts              # PR #22 Provider Health telemetry API (actuator health integration)
 ├── components/
 │   ├── layout/
 │   │   ├── AppShell.tsx          # Master dashboard shell with responsive sidebar & top navigation
-│   │   ├── Sidebar.tsx           # Collapsible navigation drawer with live engine status
-│   │   └── Header.tsx            # Top navigation with live backend health & merchant profile dropdown
+│   │   ├── Sidebar.tsx           # Collapsible navigation drawer with live engine status & active routes
+│   │   └── Header.tsx            # Top navigation with live backend health, unread notification badge, & profile dropdown
 │   ├── ui/
 │   │   ├── Alert.tsx             # Semantic alert banners (info, success, warning, error)
 │   │   ├── Avatar.tsx            # Dynamic initials avatar with status indicator
@@ -52,8 +55,14 @@ frontend/src/
 │   │   ├── RecoveryTrendChart.tsx# Responsive SVG multi-series chart with dual metric toggle & accessible data table
 │   │   ├── ChannelAnalyticsCard.tsx# Breakdown of channel volume, recovery rate, and revenue
 │   │   └── FailureAnalyticsCard.tsx# Failure root-causes and priority distribution metrics
-│   └── recovery-cases/
-│       └── RecoveryTimeline.tsx  # Chronological visual execution timeline of case lifecycle and attempts
+│   ├── recovery-cases/
+│   │   └── RecoveryTimeline.tsx  # Chronological visual execution timeline of case lifecycle and attempts
+│   ├── notifications/
+│   │   ├── NotificationItem.tsx  # PR #22 Notification card with unread dot, event badge, timestamps, & quick actions
+│   │   └── NotificationDetailModal.tsx # PR #22 Accessible modal displaying case links, payload metadata, & channel deliveries
+│   └── settings/
+│       ├── NotificationPreferencesMatrix.tsx # PR #22 4x3 Event-Channel toggle matrix, webhook input, & dirty state tracking
+│       └── ProviderHealthCard.tsx # PR #22 Operational telemetry dashboard for WhatsApp, Email, SMS, & Payment gateways
 ├── context/
 │   ├── auth-context-def.ts       # Core AuthContext definition
 │   ├── AuthContext.tsx           # Authentication session provider & state lifecycle
@@ -73,6 +82,13 @@ frontend/src/
 │   ├── recovery-cases/
 │   │   ├── RecoveryCasesPage.tsx # PR #21 Cases table, multi-parameter filters, and server pagination
 │   │   └── RecoveryCaseDetailPage.tsx# PR #21 6-section case detail, AI diagnosis, strategy, attempts, & cancellation
+│   ├── notifications/
+│   │   └── NotificationsPage.tsx # PR #22 Professional notification center with unread filter, event filter, & pagination
+│   ├── settings/
+│   │   ├── SettingsLayout.tsx    # PR #22 Settings subnavigation container with tab switcher
+│   │   ├── GeneralSettingsPage.tsx # PR #22 Read-only merchant profile, tenant ID, and security protocol details
+│   │   ├── NotificationSettingsPage.tsx # PR #22 Notification rules and webhook configuration view
+│   │   └── ProviderSettingsPage.tsx # PR #22 Upstream provider status telemetry view
 │   └── NotFoundPage.tsx          # 404 fallback page with navigation recovery
 ├── routes/
 │   └── AppRoutes.tsx             # Centralized routing with ProtectedRoute and PublicRoute guards
@@ -81,19 +97,29 @@ frontend/src/
 │   ├── auth.ts                   # Merchant, AuthResponse, LoginRequest, RegisterRequest DTOs
 │   ├── dashboard.ts              # DashboardSummary response interface
 │   ├── analytics.ts              # PR #21 Analytics DTOs and date range preset types
-│   └── recovery-case.ts          # PR #21 RecoveryCase, Detail, Customer, Payment, AI Diagnosis, Attempt DTOs
+│   ├── recovery-case.ts          # PR #21 RecoveryCase, Detail, Customer, Payment, AI Diagnosis, Attempt DTOs
+│   ├── notifications.ts          # PR #22 Notification, Delivery, Preferences, Filter DTOs
+│   └── providers.ts              # PR #22 Provider health telemetry and Actuator response types
 ├── test/
 │   ├── setup.ts                  # Vitest test setup and DOM polyfills
 │   ├── apiClient.test.ts         # Bearer header attachment, 401 expiry, and error parser tests
 │   ├── analyticsApi.test.ts      # PR #21 Analytics API endpoint and query parameter serialization tests
 │   ├── recoveryCasesApi.test.ts  # PR #21 Recovery Cases API endpoint and query parameter tests
+│   ├── notificationsApi.test.ts  # PR #22 Notification API client tests (list, get, mark read, mark all read, unread count)
+│   ├── notificationPreferencesApi.test.ts # PR #22 Notification preferences API client tests (get, update)
+│   ├── providersApi.test.ts      # PR #22 Provider health API client tests (actuator indicator, fallback, mapping)
 │   ├── auth.test.tsx             # Login, register, validation, and session expiry UI tests
 │   ├── routing.test.tsx          # Route guards, authenticated redirects, and 404 tests
 │   ├── components.test.tsx       # Reusable UI component unit tests
 │   ├── accessibility.test.tsx    # Semantic labels, ARIA attributes, and keyboard tab navigation tests
 │   ├── AnalyticsPage.test.tsx    # PR #21 AnalyticsPage KPI rendering, date range, trends chart, and error states
 │   ├── RecoveryCasesPage.test.tsx# PR #21 RecoveryCasesPage table, filters, pagination, and empty states
-│   └── RecoveryCaseDetailPage.test.tsx# PR #21 Detail page sections, AI diagnosis, timeline, and cancellation modal
+│   ├── RecoveryCaseDetailPage.test.tsx# PR #21 Detail page sections, AI diagnosis, timeline, and cancellation modal
+│   ├── NotificationsPage.test.tsx# PR #22 Notifications center listing, filters, pagination, mark read, & modal tests
+│   ├── NotificationPreferencesPage.test.tsx # PR #22 Preference matrix toggles, webhook validation, & dirty-state tests
+│   ├── ProviderSettingsPage.test.tsx # PR #22 Provider cards, status states, zero secret exposure, & refresh tests
+│   ├── HeaderNotification.test.tsx # PR #22 Header unread notification badge and link navigation tests
+│   └── SettingsLayout.test.tsx   # PR #22 Settings tabs subnavigation and account details rendering tests
 ├── App.tsx                       # Root component wrapping Router, ToastProvider, and AuthProvider
 ├── index.css                     # Tailwind CSS v4 stylesheet and theme tokens
 └── main.tsx                      # Application entry point
@@ -111,6 +137,11 @@ frontend/src/
 | `/recovery-cases` | `ProtectedRoute` | PR #21 Recovery cases management table with multi-filter toolbar and pagination. |
 | `/recovery-cases/:id` | `ProtectedRoute` | PR #21 Comprehensive case detail (Summary, Customer, Payment, AI Diagnosis, Strategy, Timeline, Cancel). |
 | `/analytics` | `ProtectedRoute` | PR #21 Recovery analytics, trends chart, channel efficiency, and failure root-cause breakdown. |
+| `/notifications` | `ProtectedRoute` | PR #22 Professional notification center with unread filter, event filter, mark-all-read, and delivery detail modal. |
+| `/settings` | `ProtectedRoute` | PR #22 Merchant settings portal (redirects to `/settings/general`). |
+| `/settings/general` | `ProtectedRoute` | PR #22 Read-only merchant account details, tenant ID, and active JWT session protocol. |
+| `/settings/notifications` | `ProtectedRoute` | PR #22 4-event × 3-channel notification preferences matrix with dirty-state tracking and webhook URL config. |
+| `/settings/providers` | `ProtectedRoute` | PR #22 Upstream communication (WhatsApp, Email, SMS) and payment provider operational health telemetry. |
 | `/` | Redirect | Automatically redirects to `/app` (which routes to `/login` if session is missing). |
 | `*` | Catch-all | Accessible 404 Not Found error page with recovery link. |
 
@@ -158,7 +189,7 @@ Development server runs at `http://localhost:5173`.
 ```bash
 npm test -- --run
 ```
-Executes all 64 Vitest unit, component, routing, analytics, and recovery case test suites in headless JSDOM mode.
+Executes all 100 Vitest unit, component, routing, analytics, recovery case, notification, preferences, and provider status test suites in headless JSDOM mode across 18 test files.
 
 ### Production Build
 ```bash

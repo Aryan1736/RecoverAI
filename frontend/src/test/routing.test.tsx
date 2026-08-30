@@ -47,6 +47,18 @@ describe('Client-side Routing & Route Guards', () => {
     expect(screen.getByRole('heading', { name: /Sign in to RecoverAI/i })).toBeInTheDocument();
   });
 
+  it('redirects unauthenticated user accessing /notifications to /login', () => {
+    renderAppWithRoute('/notifications');
+
+    expect(screen.getByRole('heading', { name: /Sign in to RecoverAI/i })).toBeInTheDocument();
+  });
+
+  it('redirects unauthenticated user accessing /settings to /login', () => {
+    renderAppWithRoute('/settings');
+
+    expect(screen.getByRole('heading', { name: /Sign in to RecoverAI/i })).toBeInTheDocument();
+  });
+
   it('allows authenticated merchant to access /app', () => {
     setStoredToken('valid-token-xyz');
     setStoredMerchant(mockMerchant);

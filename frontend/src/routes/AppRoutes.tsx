@@ -6,6 +6,11 @@ import { OverviewPage } from '../pages/dashboard/OverviewPage';
 import { AnalyticsPage } from '../pages/analytics/AnalyticsPage';
 import { RecoveryCasesPage } from '../pages/recovery-cases/RecoveryCasesPage';
 import { RecoveryCaseDetailPage } from '../pages/recovery-cases/RecoveryCaseDetailPage';
+import { NotificationsPage } from '../pages/notifications/NotificationsPage';
+import { SettingsLayout } from '../pages/settings/SettingsLayout';
+import { GeneralSettingsPage } from '../pages/settings/GeneralSettingsPage';
+import { NotificationSettingsPage } from '../pages/settings/NotificationSettingsPage';
+import { ProviderSettingsPage } from '../pages/settings/ProviderSettingsPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
 import { AppShell } from '../components/layout/AppShell';
 import { Skeleton } from '../components/ui/Skeleton';
@@ -114,6 +119,31 @@ export function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/notifications"
+        element={
+          <ProtectedRoute>
+            <AppShell>
+              <NotificationsPage />
+            </AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <ProtectedRoute>
+            <AppShell>
+              <SettingsLayout />
+            </AppShell>
+          </ProtectedRoute>
+        }
+      >
+        <Route index element={<Navigate to="/settings/general" replace />} />
+        <Route path="general" element={<GeneralSettingsPage />} />
+        <Route path="notifications" element={<NotificationSettingsPage />} />
+        <Route path="providers" element={<ProviderSettingsPage />} />
+      </Route>
 
       {/* Fallback 404 Route */}
       <Route path="*" element={<NotFoundPage />} />

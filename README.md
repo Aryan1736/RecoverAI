@@ -2059,3 +2059,59 @@ PR #21 adds 25 new tests across 5 new test suites, bringing total frontend cover
 - **`RecoveryCasesPage.test.tsx` (5 tests)**: Verifies table rendering, status/priority filtering, URL search param synchronization, active filter badges, pagination, and navigation to case detail.
 - **`RecoveryCaseDetailPage.test.tsx` (4 tests)**: Verifies all 6 case detail cards, AI diagnosis metadata, execution timeline, cancellation button state rules, and modal cancellation confirmation flow.
 
+---
+
+## PR #22: Professional Merchant Operations, Notifications & Settings Frontend
+
+PR #22 delivers the complete merchant operations, notification governance, upstream provider telemetry, and merchant settings portal, closing out the operational frontend requirements for RecoverAI.
+
+### 1. Key Capabilities Implemented
+
+1. **Merchant Notifications Center (`/notifications`)**:
+   - **Comprehensive Event Log**: Real-time listing of merchant notifications (`PAYMENT_RECOVERED`, `CASE_EXHAUSTED`, `HIGH_PRIORITY_FAILURE`, `PROVIDER_DEGRADED`).
+   - **Unread Filter & Badge Indication**: One-click toggling between all events and unread notifications, accompanied by unread dot indicators and relative timestamps (`just now`, `5m ago`, `2h ago`).
+   - **Event Type Filtering**: Dropdown filter for isolating specific critical alerts (e.g. `PAYMENT_RECOVERED`, `PROVIDER_DEGRADED`).
+   - **Quick Actions**: Individual "Mark Read" buttons on unread rows and a bulk "Mark All Read" action bar button.
+   - **Notification Detail Modal**: Accessible dialog displaying complete notification message, linked `RecoveryCase` navigation, raw payload metadata, and detailed multi-channel delivery audit logs (attempted timestamps, delivery statuses, error messages, retry counts).
+   - **Server-Side Pagination**: Full pagination matching backend Spring Pageable semantics.
+
+2. **Header Notification Experience**:
+   - **Top Navigation Bell Icon**: Dynamic notification bell in the master `Header` component.
+   - **Live Unread Counter Badge**: Displays total unread count (`data-testid="notification-unread-badge"`), automatically hidden when unread count is 0.
+   - **Quick Navigation**: One-click navigation directly to `/notifications`.
+   - **Accessible Labels**: Screen-reader friendly aria-labels indicating exact unread count.
+
+3. **Notification Preferences & Delivery Rules Matrix (`/settings/notifications`)**:
+   - **4×3 Event-Channel Matrix**: Grid configuring delivery rules across all 4 system events against all 3 delivery channels (`EMAIL`, `WEBHOOK`, `IN_APP`).
+   - **Accessible Custom Switches**: High-contrast toggle switches (`role="switch"`, `aria-checked`) with full keyboard support and screen reader descriptions.
+   - **Merchant Webhook Endpoint Configuration**: URL input allowing merchants to configure their external destination URL for automated system alerts.
+   - **Client-Side URL Validation**: Real-time format validation enforcing HTTP/HTTPS schemes.
+   - **State Machine & Dirty Tracking**: Visual tracking of unsaved changes (`Persisted` vs `Unsaved Changes` pill), enabling/disabling "Save Changes" and "Reset" buttons.
+   - **Zero Secret Exposure Policy**: Clear explanation of server-side HMAC-SHA256 signature verification (`X-Recovery-Signature` header) without client-side key generation or display.
+
+4. **Upstream Provider Health Telemetry (`/settings/providers`)**:
+   - **Live Operational Banner**: High-visibility status card summarizing system-wide communication and recovery gateway readiness (`HEALTHY`, `DEGRADED`, `UNAVAILABLE`).
+   - **Telemetry Cards by Channel**: Individual health cards for WhatsApp (Twilio), Email (SendGrid/SMTP), SMS (Twilio), and Payment Gateway Retry (Razorpay).
+   - **Sanitized Backend Diagnostics**: Real-time integration with Spring Boot Actuator `/actuator/health/providerHealthIndicator` with backend error sanitization.
+   - **On-Demand Health Check**: "Check Status" button to trigger real-time upstream telemetry refreshes with loading spinner.
+   - **Zero Secret Exposure Guarantee**: Strictly audited view verifying zero display of provider API keys, Twilio auth tokens, or Razorpay secrets.
+
+5. **Merchant General Settings & Account Profile (`/settings/general`)**:
+   - **Account Profile Governance**: Read-only display of merchant business name, tenant UUID, account status (`ACTIVE`), and connected Razorpay Account ID (`acc_...`).
+   - **Security & Session Protocol**: Information card explaining stateless JWT Bearer authorization, 24-hour token expiry, and automated 401 session recovery.
+   - **Settings Subnavigation Shell**: Tabbed layout seamlessly organizing General, Notifications, and Provider Status sections.
+
+### 2. Frontend Test Suite Expansion (100 Passing Tests across 18 Test Files)
+
+PR #22 adds 36 new automated tests across 8 new and updated test files:
+- **`notificationsApi.test.ts` (7 tests)**: Verifies notification pagination, unread query filtering, detail retrieval, mark read, mark all read, and unread count aggregation.
+- **`notificationPreferencesApi.test.ts` (2 tests)**: Verifies `GET /api/v1/notification-preferences` and `PUT /api/v1/notification-preferences` payload serialization.
+- **`providersApi.test.ts` (3 tests)**: Verifies Actuator endpoint querying, fallback to `/actuator/health`, and health status mapping.
+- **`NotificationsPage.test.tsx` (8 tests)**: Verifies list rendering, unread filter toggle, event filter dropdown, mark single read, mark all read, detail modal display, empty state, and error retry state.
+- **`NotificationPreferencesPage.test.tsx` (5 tests)**: Verifies matrix rendering, toggle interaction, dirty state detection, reset functionality, save submission, and webhook URL validation.
+- **`ProviderSettingsPage.test.tsx` (3 tests)**: Verifies provider telemetry cards, zero secret exposure audit, and manual refresh trigger.
+- **`HeaderNotification.test.tsx` (2 tests)**: Verifies header unread count badge display and navigation link.
+- **`SettingsLayout.test.tsx` (4 tests)**: Verifies subnavigation links, general merchant identity display, and tab switching.
+- **`routing.test.tsx` (8 tests)**: Updated with route guard verification for `/notifications` and `/settings`.
+
+

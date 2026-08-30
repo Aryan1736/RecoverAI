@@ -31,8 +31,8 @@ const navItems: NavItem[] = [
   { name: 'Overview', href: '/app', icon: LayoutDashboard },
   { name: 'Recovery Cases', href: '/recovery-cases', icon: ShieldAlert },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
-  { name: 'Notifications', href: '#notifications', icon: Bell, isUpcoming: true },
-  { name: 'Settings', href: '#settings', icon: Settings, isUpcoming: true },
+  { name: 'Notifications', href: '/notifications', icon: Bell },
+  { name: 'Settings', href: '/settings', icon: Settings },
 ];
 
 export function Sidebar({

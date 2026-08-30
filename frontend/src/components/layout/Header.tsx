@@ -1,20 +1,24 @@
 import { useState, useRef, useEffect } from 'react';
-import { Menu, LogOut, ShieldCheck, ChevronDown, Activity } from 'lucide-react';
+import { Link, useLocation } from 'react-router-dom';
+import { Menu, LogOut, ShieldCheck, ChevronDown, Activity, Bell } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../hooks/useToast';
 import { Avatar } from '../ui/Avatar';
 import { Badge } from '../ui/Badge';
 import { fetchHealth } from '../../api/auth';
+import { getUnreadCount } from '../../api/notifications';
 
 export interface HeaderProps {
   onOpenMobileMenu: () => void;
 }
 
 export function Header({ onOpenMobileMenu }: HeaderProps) {
+  const location = useLocation();
   const { user, logout } = useAuth();
   const { toast } = useToast();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [backendStatus, setBackendStatus] = useState<'UP' | 'OFFLINE' | 'CHECKING'>('CHECKING');
+  const [unreadCount, setUnreadCount] = useState<number>(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Check backend health on mount
@@ -34,6 +38,21 @@ export function Header({ onOpenMobileMenu }: HeaderProps) {
     };
   }, []);
 
+  // Fetch unread notification count on mount and route changes
+  useEffect(() => {
+    let mounted = true;
+    getUnreadCount()
+      .then((count) => {
+        if (mounted) setUnreadCount(count);
+      })
+      .catch(() => {
+        if (mounted) setUnreadCount(0);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [location.pathname]);
+
   // Close dropdown on outside click
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -49,6 +68,15 @@ export function Header({ onOpenMobileMenu }: HeaderProps) {
     setDropdownOpen(false);
     logout();
     toast.info('You have been signed out.');
+  };
+
+  const getBreadcrumbTitle = () => {
+    const path = location.pathname;
+    if (path.startsWith('/notifications')) return 'Notifications';
+    if (path.startsWith('/settings')) return 'Settings & Operations';
+    if (path.startsWith('/recovery-cases')) return 'Recovery Cases';
+    if (path.startsWith('/analytics')) return 'Analytics';
+    return 'Overview';
   };
 
   return (
@@ -67,7 +95,7 @@ export function Header({ onOpenMobileMenu }: HeaderProps) {
         <div className="flex items-center gap-2 text-xs font-medium">
           <span className="text-slate-400">Merchant Portal</span>
           <span className="text-slate-600">/</span>
-          <span className="text-slate-200 font-semibold">Overview</span>
+          <span className="text-slate-200 font-semibold">{getBreadcrumbTitle()}</span>
         </div>
       </div>
 
@@ -97,6 +125,24 @@ export function Header({ onOpenMobileMenu }: HeaderProps) {
             {backendStatus}
           </span>
         </div>
+
+        {/* Notification indicator button */}
+        <Link
+          to="/notifications"
+          className="relative p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-900 border border-transparent hover:border-slate-800 transition focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+          aria-label={unreadCount > 0 ? `Notifications (${unreadCount} unread)` : 'Notifications'}
+          title={unreadCount > 0 ? `${unreadCount} unread notification${unreadCount > 1 ? 's' : ''}` : 'Notifications'}
+        >
+          <Bell className="w-4 h-4" />
+          {unreadCount > 0 && (
+            <span
+              className="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-indigo-600 text-[10px] font-bold text-white shadow-sm ring-2 ring-slate-950"
+              data-testid="notification-unread-badge"
+            >
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
+        </Link>
 
         {/* Merchant Account Menu */}
         <div className="relative" ref={dropdownRef}>

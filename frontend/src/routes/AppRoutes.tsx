@@ -3,6 +3,9 @@ import { useAuth } from '../hooks/useAuth';
 import { LoginPage } from '../pages/auth/LoginPage';
 import { RegisterPage } from '../pages/auth/RegisterPage';
 import { OverviewPage } from '../pages/dashboard/OverviewPage';
+import { AnalyticsPage } from '../pages/analytics/AnalyticsPage';
+import { RecoveryCasesPage } from '../pages/recovery-cases/RecoveryCasesPage';
+import { RecoveryCaseDetailPage } from '../pages/recovery-cases/RecoveryCaseDetailPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
 import { AppShell } from '../components/layout/AppShell';
 import { Skeleton } from '../components/ui/Skeleton';
@@ -77,6 +80,36 @@ export function AppRoutes() {
           <ProtectedRoute>
             <AppShell>
               <OverviewPage />
+            </AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/recovery-cases"
+        element={
+          <ProtectedRoute>
+            <AppShell>
+              <RecoveryCasesPage />
+            </AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/recovery-cases/:id"
+        element={
+          <ProtectedRoute>
+            <AppShell>
+              <RecoveryCaseDetailPage />
+            </AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/analytics"
+        element={
+          <ProtectedRoute>
+            <AppShell>
+              <AnalyticsPage />
             </AppShell>
           </ProtectedRoute>
         }

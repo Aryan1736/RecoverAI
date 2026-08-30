@@ -2016,3 +2016,46 @@ Test coverage encompasses 5 suites and 39 tests:
 - **Routing & Route Guards (`routing.test.tsx`)**: 6 tests verifying unauthenticated redirection, root redirection, authenticated access to `/app`, authenticated redirection away from `/login` and `/register`, and 404 route rendering.
 - **Design System UI (`components.test.tsx`)**: 14 tests verifying Button variants, loading spinner, Input validation states, PasswordInput toggle, Card composability, Badge indicators, Alert dismissal, Avatar initials, EmptyState, ErrorState, PageHeader, and Sidebar collapse functionality.
 - **Accessibility & Focus (`accessibility.test.tsx`)**: 3 tests verifying programmatic form labels, ARIA attributes, button roles, and complete keyboard tab navigation.
+
+---
+
+## PR #21: Professional Recovery Cases & Analytics Dashboard
+
+PR #21 builds upon the merchant frontend foundation established in PR #20, delivering a complete, interactive, enterprise-grade revenue recovery management and intelligence dashboard powered directly by RecoverAI's backend REST APIs.
+
+### 1. Key Capabilities Implemented
+
+1. **Recovery Cases Management (`/recovery-cases`)**:
+   - **Multi-Parameter Filter Toolbar**: Live filtering by case status (`OPEN`, `IN_PROGRESS`, `RECOVERED`, `FAILED`, `EXPIRED`, `CANCELLED`), priority tier (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`), and failure root-cause category search.
+   - **Bidirectional URL Query Sync**: Filters and pagination state are synchronized with URL search params (`?status=...&priority=...&category=...&page=...`), enabling bookmarking, browser back/forward navigation, and team link sharing.
+   - **Active Filter Badges**: Dynamic chips indicating active filter criteria with one-click individual dismissal and a "Clear Filters" action.
+   - **Server-Side Pagination**: Full page-by-page server navigation with previous/next controls, page number buttons, item ranges, and bounds validation.
+   - **Enterprise Responsive Table**: Dense, accessible data table displaying recovery case ID, customer name/email, at-risk amount, status badges, priority pills, failure category, creation timestamp, and direct links to case detail.
+   - **Polished States**: Skeleton shimmer table placeholder during loading, user-friendly `ErrorState` with retry action, and honest `EmptyState` distinguishing between zero cases in the merchant account vs zero cases matching filter criteria.
+
+2. **Case Detail Drilldown & Visual Timeline (`/recovery-cases/:id`)**:
+   - **6 Dedicated Semantic Cards**:
+     1. *Case Overview*: Status, priority, recoverable amount, amount recovered, creation date, expiration timestamp, closed date.
+     2. *AI Recovery Diagnosis*: Gemini model version, confidence rating (e.g. `94% Confidence`), prescribed recovery action, diagnostic reasoning, token usage stats, and decision factors.
+     3. *Recovery Strategy*: Strategy ID, primary channel, prescribed action, confidence score, priority, and fallback channel policy.
+     4. *Execution Timeline & Attempts*: Interactive chronological sequence tracing the case lifecycle from ingestion through AI diagnosis, communication dispatch, and recovery outcome with recovery link preview.
+     5. *Customer Profile*: Customer name, email, phone number, and Razorpay Customer ID.
+     6. *Underlying Payment*: Transaction amount, gateway payment status, payment method (`CARD`, `UPI`, `NETBANKING`), Razorpay Payment ID, Order ID, and gateway error code/description.
+   - **Case Cancellation Flow**: Modal dialog with confirmation prompt allowing merchants to halt automated recovery pipelines for active cases (`OPEN`, `IN_PROGRESS`, `FAILED`), strictly enforcing backend domain state rules.
+
+3. **Analytics & Recovery Intelligence (`/analytics`)**:
+   - **Dynamic Date-Range Selection**: Presets for `Last 7 Days`, `Last 30 Days`, `Last 90 Days`, and `Last 12 Months`, plus Custom Date Range modal with client-side bounds enforcement (`from <= to`, max 365 days) matching backend `DateRange` constraints.
+   - **KPI Executive Summary Cards**: Real numbers for Total Ingested Cases, Recovered Cases Count, Closed-Loop Recovery Rate (%), and Average Time to Recovery (formatted in hours/minutes).
+   - **Multi-Series Recovery Trends SVG Chart**: Scalable, accessible vector chart plotting Recoverable Amount vs Recovered Amount over time with dual metric toggle (Revenue vs Case Volume) and alternative accessible data table view.
+   - **Channel Efficiency Breakdown**: Comparative matrix displaying volume, delivery rate, click-through rate, conversion rate, and recovered revenue by channel (`WHATSAPP`, `EMAIL`, `SMS`, `RETRY_CHARGE`, `SMART_LINK`).
+   - **Root-Cause Failure & Priority Distribution**: Visual analytics detailing recovery conversion rates across failure categories (`INSUFFICIENT_FUNDS`, `GATEWAY_ERROR`, `AUTH_FAILED`, etc.) and priority classifications.
+
+### 2. Frontend Test Suite Expansion (64 Passing Tests)
+
+PR #21 adds 25 new tests across 5 new test suites, bringing total frontend coverage to 64 tests across 10 test files:
+- **`analyticsApi.test.ts` (6 tests)**: Verifies all 5 analytics endpoint methods, query parameter serialization, and error propagation.
+- **`recoveryCasesApi.test.ts` (5 tests)**: Verifies cases listing, pagination parameters, detail fetching, attempts retrieval, and cancellation `PATCH` requests.
+- **`AnalyticsPage.test.tsx` (5 tests)**: Verifies executive KPI card rendering, SVG chart metrics toggling, accessible table view, channel breakdown cards, date preset changes, and error retry state.
+- **`RecoveryCasesPage.test.tsx` (5 tests)**: Verifies table rendering, status/priority filtering, URL search param synchronization, active filter badges, pagination, and navigation to case detail.
+- **`RecoveryCaseDetailPage.test.tsx` (4 tests)**: Verifies all 6 case detail cards, AI diagnosis metadata, execution timeline, cancellation button state rules, and modal cancellation confirmation flow.
+

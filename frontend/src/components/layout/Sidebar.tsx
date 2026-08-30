@@ -29,8 +29,8 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { name: 'Overview', href: '/app', icon: LayoutDashboard },
-  { name: 'Recovery Cases', href: '#cases', icon: ShieldAlert, isUpcoming: true },
-  { name: 'Analytics', href: '#analytics', icon: BarChart3, isUpcoming: true },
+  { name: 'Recovery Cases', href: '/recovery-cases', icon: ShieldAlert },
+  { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   { name: 'Notifications', href: '#notifications', icon: Bell, isUpcoming: true },
   { name: 'Settings', href: '#settings', icon: Settings, isUpcoming: true },
 ];
@@ -85,7 +85,10 @@ export function Sidebar({
         </div>
 
         {navItems.map((item) => {
-          const isActive = location.pathname === item.href && !item.isUpcoming;
+          const isActive =
+            !item.isUpcoming &&
+            (location.pathname === item.href ||
+              (item.href !== '/app' && location.pathname.startsWith(item.href)));
           const Icon = item.icon;
 
           if (item.isUpcoming) {

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import {
   ShieldAlert,
   Zap,
@@ -11,6 +12,8 @@ import {
   ExternalLink,
   Copy,
   Check,
+  ArrowRight,
+  BarChart3,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../hooks/useToast';
@@ -275,10 +278,24 @@ export function OverviewPage() {
                   }
                 />
               ) : (
-                <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 text-xs text-slate-400">
-                  <p>
-                    {summary?.totalRecoveryCases ?? 0} total cases detected. Complete interactive case management and drilldown will be available in PR #21.
-                  </p>
+                <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 space-y-3 text-xs">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <p className="text-slate-300">
+                      <span className="font-semibold text-white font-mono">{summary?.totalRecoveryCases ?? 0}</span> recovery cases tracked with active autonomous diagnosis.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Link to="/recovery-cases">
+                        <Button size="sm" variant="primary" rightIcon={<ArrowRight className="w-3.5 h-3.5" />}>
+                          View Cases
+                        </Button>
+                      </Link>
+                      <Link to="/analytics">
+                        <Button size="sm" variant="outline" leftIcon={<BarChart3 className="w-3.5 h-3.5" />}>
+                          Analytics
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
                 </div>
               )}
             </CardContent>

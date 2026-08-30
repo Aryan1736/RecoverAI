@@ -27,6 +27,7 @@ import com.recoverai.backend.repository.WebhookEventRepository;
 import com.recoverai.backend.security.RazorpaySignatureVerifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,6 +39,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 
@@ -55,6 +57,30 @@ public class RazorpayWebhookService {
     private final FailureReasonClassifier failureReasonClassifier;
     private final AuditService auditService;
     private final ObjectMapper objectMapper;
+    private final PaymentReconciliationService paymentReconciliationService;
+
+    @Autowired
+    public RazorpayWebhookService(MerchantRepository merchantRepository,
+                                  CustomerRepository customerRepository,
+                                  PaymentRepository paymentRepository,
+                                  RecoveryCaseRepository recoveryCaseRepository,
+                                  WebhookEventRepository webhookEventRepository,
+                                  RazorpaySignatureVerifier signatureVerifier,
+                                  FailureReasonClassifier failureReasonClassifier,
+                                  AuditService auditService,
+                                  ObjectMapper objectMapper,
+                                  PaymentReconciliationService paymentReconciliationService) {
+        this.merchantRepository = merchantRepository;
+        this.customerRepository = customerRepository;
+        this.paymentRepository = paymentRepository;
+        this.recoveryCaseRepository = recoveryCaseRepository;
+        this.webhookEventRepository = webhookEventRepository;
+        this.signatureVerifier = signatureVerifier;
+        this.failureReasonClassifier = failureReasonClassifier;
+        this.auditService = auditService;
+        this.objectMapper = objectMapper;
+        this.paymentReconciliationService = paymentReconciliationService;
+    }
 
     public RazorpayWebhookService(MerchantRepository merchantRepository,
                                   CustomerRepository customerRepository,
@@ -65,15 +91,8 @@ public class RazorpayWebhookService {
                                   FailureReasonClassifier failureReasonClassifier,
                                   AuditService auditService,
                                   ObjectMapper objectMapper) {
-        this.merchantRepository = merchantRepository;
-        this.customerRepository = customerRepository;
-        this.paymentRepository = paymentRepository;
-        this.recoveryCaseRepository = recoveryCaseRepository;
-        this.webhookEventRepository = webhookEventRepository;
-        this.signatureVerifier = signatureVerifier;
-        this.failureReasonClassifier = failureReasonClassifier;
-        this.auditService = auditService;
-        this.objectMapper = objectMapper;
+        this(merchantRepository, customerRepository, paymentRepository, recoveryCaseRepository,
+                webhookEventRepository, signatureVerifier, failureReasonClassifier, auditService, objectMapper, null);
     }
 
     /**
@@ -174,6 +193,11 @@ public class RazorpayWebhookService {
                     webhookRecord.setProcessingStatus(WebhookProcessingStatus.PROCESSED);
                     webhookRecord.setProcessedAt(Instant.now());
                 }
+                case "order.paid" -> {
+                    handleOrderPaidEvent(merchant, payload, eventType, clientIp);
+                    webhookRecord.setProcessingStatus(WebhookProcessingStatus.PROCESSED);
+                    webhookRecord.setProcessedAt(Instant.now());
+                }
                 default -> {
                     log.info("Ignored unsupported webhook event type '{}' for merchant {}", eventType, merchant.getId());
                     webhookRecord.setProcessingStatus(WebhookProcessingStatus.IGNORED);
@@ -215,7 +239,49 @@ public class RazorpayWebhookService {
         // Failed payment -> Recovery Case creation
         if (payment.getStatus() == PaymentStatus.FAILED) {
             resolveAndSaveRecoveryCase(merchant, customer, payment, paymentDto, clientIp);
+        } else if (payment.getStatus() == PaymentStatus.CAPTURED) {
+            // PR #16: Closed-loop payment recovery reconciliation
+            if (paymentReconciliationService != null) {
+                paymentReconciliationService.reconcilePaymentSuccess(merchant, payment, eventType, clientIp);
+            }
         }
+    }
+
+    private void handleOrderPaidEvent(Merchant merchant, RazorpayWebhookPayload payload, String eventType, String clientIp) {
+        // 1. If payload contains payment entity, process payment normally (which marks CAPTURED and reconciles)
+        if (payload.getPayload() != null && payload.getPayload().getPayment() != null
+                && payload.getPayload().getPayment().getEntity() != null) {
+            handlePaymentEvent(merchant, payload, eventType, clientIp);
+            return;
+        }
+
+        // 2. If payload contains order entity but no payment entity
+        if (payload.getPayload() != null && payload.getPayload().getOrder() != null
+                && payload.getPayload().getOrder().getEntity() != null) {
+            var orderDto = payload.getPayload().getOrder().getEntity();
+            String orderId = orderDto.getId();
+            if (orderId != null && !orderId.isBlank()) {
+                List<RecoveryCase> activeCases = recoveryCaseRepository.findActiveByMerchantIdAndRazorpayOrderId(
+                        merchant.getId(), orderId, List.of(RecoveryCaseStatus.OPEN, RecoveryCaseStatus.IN_PROGRESS));
+                if (!activeCases.isEmpty()) {
+                    RecoveryCase recoveryCase = activeCases.get(0);
+                    BigDecimal orderAmount = orderDto.getAmountPaid() != null
+                            ? BigDecimal.valueOf(orderDto.getAmountPaid()).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP)
+                            : (orderDto.getAmount() != null
+                            ? BigDecimal.valueOf(orderDto.getAmount()).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP)
+                            : null);
+                    if (paymentReconciliationService != null) {
+                        paymentReconciliationService.reconcileCaseRecovery(
+                                merchant, recoveryCase, recoveryCase.getPayment(), orderAmount, eventType, clientIp, null);
+                    }
+                } else {
+                    log.info("No active recovery case found for order.paid event on orderId={} for merchant={}", orderId, merchant.getId());
+                }
+                return;
+            }
+        }
+
+        throw new WebhookProcessingException("Missing both payment and order entities in webhook payload for event: " + eventType);
     }
 
     private Customer resolveCustomer(Merchant merchant, RazorpayPaymentEntityDto paymentDto) {
@@ -358,7 +424,8 @@ public class RazorpayWebhookService {
         if ("payment.failed".equalsIgnoreCase(eventType) || "failed".equalsIgnoreCase(statusStr)) {
             return PaymentStatus.FAILED;
         }
-        if ("payment.captured".equalsIgnoreCase(eventType) || "captured".equalsIgnoreCase(statusStr)) {
+        if ("payment.captured".equalsIgnoreCase(eventType) || "order.paid".equalsIgnoreCase(eventType)
+                || "captured".equalsIgnoreCase(statusStr) || "paid".equalsIgnoreCase(statusStr)) {
             return PaymentStatus.CAPTURED;
         }
         if ("payment.authorized".equalsIgnoreCase(eventType) || "authorized".equalsIgnoreCase(statusStr)) {

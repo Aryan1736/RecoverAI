@@ -26,6 +26,7 @@ import com.recoverai.backend.repository.RecoveryOutcomeEventRepository;
 import com.recoverai.backend.security.RecoveryOutcomeSignatureVerifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -52,6 +53,30 @@ public class RecoveryOutcomeService {
     private final RecoveryAttemptStateMachine stateMachine;
     private final AuditService auditService;
     private final ObjectMapper objectMapper;
+    private final PaymentReconciliationService paymentReconciliationService;
+
+    @Autowired
+    public RecoveryOutcomeService(MerchantRepository merchantRepository,
+                                  RecoveryAttemptRepository recoveryAttemptRepository,
+                                  RecoveryCaseRepository recoveryCaseRepository,
+                                  PaymentRepository paymentRepository,
+                                  RecoveryOutcomeEventRepository recoveryOutcomeEventRepository,
+                                  RecoveryOutcomeSignatureVerifier signatureVerifier,
+                                  RecoveryAttemptStateMachine stateMachine,
+                                  AuditService auditService,
+                                  ObjectMapper objectMapper,
+                                  PaymentReconciliationService paymentReconciliationService) {
+        this.merchantRepository = merchantRepository;
+        this.recoveryAttemptRepository = recoveryAttemptRepository;
+        this.recoveryCaseRepository = recoveryCaseRepository;
+        this.paymentRepository = paymentRepository;
+        this.recoveryOutcomeEventRepository = recoveryOutcomeEventRepository;
+        this.signatureVerifier = signatureVerifier;
+        this.stateMachine = stateMachine;
+        this.auditService = auditService;
+        this.objectMapper = objectMapper;
+        this.paymentReconciliationService = paymentReconciliationService;
+    }
 
     public RecoveryOutcomeService(MerchantRepository merchantRepository,
                                   RecoveryAttemptRepository recoveryAttemptRepository,
@@ -62,15 +87,8 @@ public class RecoveryOutcomeService {
                                   RecoveryAttemptStateMachine stateMachine,
                                   AuditService auditService,
                                   ObjectMapper objectMapper) {
-        this.merchantRepository = merchantRepository;
-        this.recoveryAttemptRepository = recoveryAttemptRepository;
-        this.recoveryCaseRepository = recoveryCaseRepository;
-        this.paymentRepository = paymentRepository;
-        this.recoveryOutcomeEventRepository = recoveryOutcomeEventRepository;
-        this.signatureVerifier = signatureVerifier;
-        this.stateMachine = stateMachine;
-        this.auditService = auditService;
-        this.objectMapper = objectMapper;
+        this(merchantRepository, recoveryAttemptRepository, recoveryCaseRepository, paymentRepository,
+                recoveryOutcomeEventRepository, signatureVerifier, stateMachine, auditService, objectMapper, null);
     }
 
     /**
@@ -217,17 +235,29 @@ public class RecoveryOutcomeService {
 
             // Reconcile RecoveryCase based on outcome
             if (targetStatus == RecoveryAttemptStatus.SUCCESS) {
-                recoveryCase.setStatus(RecoveryCaseStatus.RECOVERED);
-                recoveryCase.setRecoveredAt(eventTime);
-                // Trusted amount derived from existing trusted case data
-                recoveryCase.setRecoveredAmount(recoveryCase.getEstimatedRecoverableAmount());
-                recoveryCaseRepository.save(recoveryCase);
+                if (paymentReconciliationService != null) {
+                    paymentReconciliationService.reconcileCaseRecovery(
+                            merchant,
+                            recoveryCase,
+                            recoveryCase.getPayment(),
+                            recoveryCase.getEstimatedRecoverableAmount(),
+                            "RECOVERY_OUTCOME:" + request.getProvider(),
+                            clientIp,
+                            attempt
+                    );
+                } else {
+                    recoveryCase.setStatus(RecoveryCaseStatus.RECOVERED);
+                    recoveryCase.setRecoveredAt(eventTime);
+                    // Trusted amount derived from existing trusted case data
+                    recoveryCase.setRecoveredAmount(recoveryCase.getEstimatedRecoverableAmount());
+                    recoveryCaseRepository.save(recoveryCase);
 
-                // Update associated payment status if present
-                Payment payment = recoveryCase.getPayment();
-                if (payment != null) {
-                    payment.setStatus(PaymentStatus.CAPTURED);
-                    paymentRepository.save(payment);
+                    // Update associated payment status if present
+                    Payment payment = recoveryCase.getPayment();
+                    if (payment != null) {
+                        payment.setStatus(PaymentStatus.CAPTURED);
+                        paymentRepository.save(payment);
+                    }
                 }
 
                 auditService.recordEvent(merchant, "RECOVERY_ATTEMPT_SUCCEEDED", ActorType.WEBHOOK, "RecoveryOutcomeWebhook",

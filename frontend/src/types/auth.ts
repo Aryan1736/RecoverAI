@@ -34,6 +34,7 @@ export interface AuthContextType {
   user: Merchant | null;
   token: string | null;
   isAuthenticated: boolean;
+  isDemoMode: boolean;
   isLoading: boolean;
   sessionExpiredMessage: string | null;
   login: (credentials: LoginRequest) => Promise<AuthResponse>;

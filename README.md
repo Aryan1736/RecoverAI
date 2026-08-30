@@ -2114,4 +2114,54 @@ PR #22 adds 36 new automated tests across 8 new and updated test files:
 - **`SettingsLayout.test.tsx` (4 tests)**: Verifies subnavigation links, general merchant identity display, and tab switching.
 - **`routing.test.tsx` (8 tests)**: Updated with route guard verification for `/notifications` and `/settings`.
 
+---
+
+## PR #23: Interactive Demo Mode (Zero-Friction Sandbox Environment)
+
+PR #23 delivers an instantaneous, professional, production-safe "Try Interactive Demo" mode for RecoverAI, enabling evaluators, judges, and potential merchants to test-drive the entire merchant recovery portal immediately without registration, credentials, or backend setup.
+
+### 1. Key Capabilities Implemented
+
+1. **Frictionless Demo Entry (`/login`)**:
+   - **Prominent Primary CTA Card**: "Try Interactive Demo" card prominently positioned with an "Interactive Sandbox" badge and clear value proposition.
+   - **Transparent Communication**: Explicitly states *"No account required • Simulated demo data"*.
+   - **One-Click Instant Access**: Navigates directly into the merchant dashboard (`/app`) with zero authentication delay or network latency.
+   - **Preserved Keyboard Navigation**: Fully keyboard accessible with standard Tab order.
+
+2. **Isolated Frontend Architecture**:
+   - **Dedicated Demo Context**: `DemoProvider` (`frontend/src/context/DemoContext.tsx`) and `useDemoMode` (`frontend/src/hooks/useDemoMode.ts`) manage demo mode independently from production auth infrastructure.
+   - **Zero Backend Auth Bypass**: Demo mode does NOT create fake JWTs, does not send Bearer tokens, and never sends unauthenticated requests to protected backend endpoints.
+   - **Client-Side Session Persistence**: Preserves demo mode state across browser refreshes via `recoverai_demo_mode` in `localStorage`.
+   - **Clean Session Separation**:
+     - Visitor: `isAuthenticated = false, isDemoMode = false`
+     - Demo Evaluator: `isAuthenticated = false, isDemoMode = true`
+     - Merchant: `isAuthenticated = true, isDemoMode = false` (real login automatically clears demo mode).
+
+3. **Visual Demo Feedback & Exit Flow**:
+   - **Persistent Header Badge**: High-contrast amber `DEMO MODE` badge (`role="status"`) with an animated pulse indicator and "Simulated Data" tag.
+   - **Evaluator Profile Avatar**: Header profile dropdown displays "Demo Evaluator" and `demo@recoverai.local`.
+   - **Instant Exit Action**: Accessible "Exit Demo" button clears demo state and seamlessly navigates back to `/login`.
+   - **Overview Banner**: Contextual banner on Overview dashboard clarifying that data is simulated for evaluation purposes.
+
+4. **Comprehensive Simulated Domain Telemetry (`api/demo.ts`)**:
+   - **Executive Dashboard**: Pre-loaded KPI cards (₹2.45M recovered revenue, 78.4% success rate, 38 at-risk transactions, 45 active workflows).
+   - **Recovery Cases**: Realistically populated table with filters for status (`OPEN`, `IN_PROGRESS`, `RECOVERED`), priority (`CRITICAL`, `HIGH`, `MEDIUM`), and pagination.
+   - **Case Detail View**: Case detail including autonomous Gemini 3.7 Flash failure analysis, fallback strategy, chronological attempt timeline, and safe simulated case cancellation with toast feedback.
+   - **Recovery Analytics**: Overview KPIs, 30-day recovery trends SVG chart, multi-channel performance breakdown (WhatsApp, Email, SMS), and failure root-cause distribution.
+   - **Notification Center**: Event log (`PAYMENT_RECOVERED`, `HIGH_PRIORITY_FAILURE`), unread filter, mark-all-as-read simulation, and delivery detail modal.
+   - **Provider Operational Health**: Real-time status cards for WhatsApp Cloud API, AWS SES, Gupshup SMS Gateway, and Razorpay Orders API.
+   - **Notification Preferences**: 4×3 event-channel matrix with custom switches and simulated preferences saving.
+
+### 2. Frontend Test Suite Expansion (122 Passing Tests across 19 Test Files)
+
+PR #23 adds 22 comprehensive tests in `demoMode.test.tsx`, expanding the frontend test suite to 122 passing tests across 19 test files:
+- **Demo Session Lifecycle**: Enters demo mode, persists in `localStorage`, restores on refresh, exits cleanly, and clears on real merchant login.
+- **Routing Guards**: Verifies unauthenticated visitors are blocked, demo users can access all protected portal views, authenticated merchants access live routes, and public routes are preserved.
+- **Entry Experience**: Verifies "Try Interactive Demo" button, click handler, and zero backend authentication calls.
+- **Header & Controls**: Verifies `DEMO MODE` badge visibility, evaluator profile dropdown, and exit demo action.
+- **Security Assertions**: Validates zero fake Authorization headers in requests and verifies production JWT Bearer behavior remains unaltered.
+- **Accessibility Compliance**: Verifies status roles, ARIA labels, and keyboard navigability.
+- **Analytics Demo Isolation**: Verifies `/analytics` renders without calling backend `/api/v1/analytics/*` endpoints, date range selector updates purely in-memory, and authenticated mode continues querying backend endpoints.
+
+
 

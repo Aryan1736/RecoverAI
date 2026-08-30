@@ -26,14 +26,14 @@ function PageLoadingFallback() {
 }
 
 export function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isDemoMode, isLoading } = useAuth();
   const location = useLocation();
 
   if (isLoading) {
     return <PageLoadingFallback />;
   }
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated && !isDemoMode) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 

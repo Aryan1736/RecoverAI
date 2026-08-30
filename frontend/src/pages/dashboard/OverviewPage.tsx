@@ -14,10 +14,12 @@ import {
   Check,
   ArrowRight,
   BarChart3,
+  Sparkles,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../hooks/useToast';
 import { getDashboardSummary } from '../../api/dashboard';
+import { getDemoDashboard } from '../../api/demo';
 import type { DashboardSummary } from '../../types/dashboard';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
@@ -29,7 +31,7 @@ import { PageHeader } from '../../components/ui/PageHeader';
 import { API_BASE_URL } from '../../api/client';
 
 export function OverviewPage() {
-  const { user } = useAuth();
+  const { user, isDemoMode } = useAuth();
   const { toast } = useToast();
 
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
@@ -41,7 +43,7 @@ export function OverviewPage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await getDashboardSummary();
+      const data = isDemoMode ? await getDemoDashboard() : await getDashboardSummary();
       setSummary(data);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to load dashboard metrics';
@@ -49,13 +51,13 @@ export function OverviewPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isDemoMode]);
 
   useEffect(() => {
     let cancelled = false;
     async function loadInitial() {
       try {
-        const data = await getDashboardSummary();
+        const data = isDemoMode ? await getDemoDashboard() : await getDashboardSummary();
         if (!cancelled) {
           setSummary(data);
           setError(null);
@@ -75,7 +77,7 @@ export function OverviewPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isDemoMode]);
 
   const webhookEndpoint = `${API_BASE_URL}/api/v1/webhooks/razorpay`;
 
@@ -102,11 +104,15 @@ export function OverviewPage() {
     <div className="space-y-8">
       {/* Page Header */}
       <PageHeader
-        title={`Welcome, ${user?.name || 'Merchant'}`}
-        description="Autonomous revenue recovery operations and intelligent payment failure diagnosis."
+        title={isDemoMode ? 'Welcome, Demo Evaluator' : `Welcome, ${user?.name || 'Merchant'}`}
+        description={
+          isDemoMode
+            ? 'Interactive sandbox environment with preloaded simulated payment recovery cases and analytics.'
+            : 'Autonomous revenue recovery operations and intelligent payment failure diagnosis.'
+        }
         badge={
-          <Badge variant="success" dot pulse>
-            {user?.status || 'ACTIVE'}
+          <Badge variant={isDemoMode ? 'warning' : 'success'} dot pulse>
+            {isDemoMode ? 'DEMO ENVIRONMENT' : user?.status || 'ACTIVE'}
           </Badge>
         }
         actions={
@@ -123,6 +129,25 @@ export function OverviewPage() {
           </div>
         }
       />
+
+      {/* Demo Mode Notice Banner */}
+      {isDemoMode && (
+        <div
+          role="status"
+          aria-label="Interactive Demo Environment active"
+          className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm animate-in fade-in"
+        >
+          <div className="flex items-center gap-2.5">
+            <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>
+              <strong>Demo Environment Active:</strong> You are exploring RecoverAI with preloaded simulated metrics, cases, and analytics. Real production APIs and backend database mutations are disabled.
+            </span>
+          </div>
+          <Badge variant="warning" className="shrink-0 self-start sm:self-auto">
+            Simulated Sandbox
+          </Badge>
+        </div>
+      )}
 
       {/* Live System Engine & Safety Status Banner */}
       <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-indigo-950/40 via-slate-900/60 to-slate-900/40 border border-indigo-500/20 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">

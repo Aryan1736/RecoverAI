@@ -19,6 +19,8 @@ import { Button } from '../ui/Button';
 import { Skeleton } from '../ui/Skeleton';
 import { ErrorState } from '../ui/ErrorState';
 import { getProviderHealth } from '../../api/providers';
+import { getDemoProviderHealth } from '../../api/demo';
+import { useDemoMode } from '../../hooks/useDemoMode';
 import type {
   ProviderHealthSummary,
   ProviderStatusItem,
@@ -39,6 +41,7 @@ function getStatusBadgeConfig(status: ProviderHealthState): {
       return { label: 'Unavailable', variant: 'danger', pulse: true };
     case 'DISABLED':
       return { label: 'Disabled', variant: 'default', pulse: false };
+    case 'UNKNOWN':
     default:
       return { label: 'Unknown', variant: 'outline', pulse: false };
   }
@@ -54,6 +57,7 @@ function getChannelIcon(channel: string) {
 }
 
 export function ProviderHealthCard() {
+  const { isDemoMode } = useDemoMode();
   const [summary, setSummary] = useState<ProviderHealthSummary | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
@@ -65,7 +69,7 @@ export function ProviderHealthCard() {
     setError(null);
 
     try {
-      const data = await getProviderHealth();
+      const data = isDemoMode ? await getDemoProviderHealth() : await getProviderHealth();
       setSummary(data);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to retrieve provider health telemetry';
@@ -81,7 +85,7 @@ export function ProviderHealthCard() {
 
     async function loadData() {
       try {
-        const data = await getProviderHealth();
+        const data = isDemoMode ? await getDemoProviderHealth() : await getProviderHealth();
         if (!cancelled) {
           setSummary(data);
           setError(null);
@@ -102,7 +106,7 @@ export function ProviderHealthCard() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isDemoMode]);
 
   if (isLoading) {
     return (

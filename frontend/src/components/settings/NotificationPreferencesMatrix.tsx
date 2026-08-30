@@ -19,10 +19,12 @@ import { Input } from '../ui/Input';
 import { Skeleton } from '../ui/Skeleton';
 import { ErrorState } from '../ui/ErrorState';
 import { useToast } from '../../hooks/useToast';
+import { useDemoMode } from '../../hooks/useDemoMode';
 import {
   getNotificationPreferences,
   updateNotificationPreferences,
 } from '../../api/notification-preferences';
+import { getDemoNotificationPreferences } from '../../api/demo';
 import type {
   MerchantNotificationEvent,
   MerchantNotificationChannel,
@@ -93,6 +95,7 @@ function buildDefaultMatrix(): PreferencesMap {
 }
 
 export function NotificationPreferencesMatrix() {
+  const { isDemoMode } = useDemoMode();
   const { toast } = useToast();
 
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -111,7 +114,9 @@ export function NotificationPreferencesMatrix() {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await getNotificationPreferences();
+      const data = isDemoMode
+        ? await getDemoNotificationPreferences()
+        : await getNotificationPreferences();
       setPersistedData(data);
       setWebhookUrl(data.webhookUrl || '');
 
@@ -142,7 +147,9 @@ export function NotificationPreferencesMatrix() {
 
     async function loadData() {
       try {
-        const data = await getNotificationPreferences();
+        const data = isDemoMode
+          ? await getDemoNotificationPreferences()
+          : await getNotificationPreferences();
         if (!cancelled) {
           setPersistedData(data);
           setWebhookUrl(data.webhookUrl || '');
@@ -178,7 +185,7 @@ export function NotificationPreferencesMatrix() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isDemoMode]);
 
   // Check dirty state
   const isDirty = useMemo(() => {
@@ -258,6 +265,15 @@ export function NotificationPreferencesMatrix() {
 
     setIsSaving(true);
     try {
+      if (isDemoMode) {
+        toast.info('Simulated in Demo Mode: preferences updated locally.');
+        setPersistedData({
+          merchantId: 'demo-merchant-evaluator',
+          webhookUrl: webhookUrl.trim() || null,
+          preferences,
+        });
+        return;
+      }
       const payload = {
         webhookUrl: webhookUrl.trim() || null,
         preferences,

@@ -1,12 +1,15 @@
 import { useState, useRef, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Menu, LogOut, ShieldCheck, ChevronDown, Activity, Bell } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
+import { useDemoMode } from '../../hooks/useDemoMode';
 import { useToast } from '../../hooks/useToast';
 import { Avatar } from '../ui/Avatar';
 import { Badge } from '../ui/Badge';
+import { DemoModeBadge } from './DemoModeBadge';
 import { fetchHealth } from '../../api/auth';
 import { getUnreadCount } from '../../api/notifications';
+import { getDemoUnreadCount } from '../../api/demo';
 
 export interface HeaderProps {
   onOpenMobileMenu: () => void;
@@ -14,7 +17,9 @@ export interface HeaderProps {
 
 export function Header({ onOpenMobileMenu }: HeaderProps) {
   const location = useLocation();
-  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const { user, isDemoMode, logout } = useAuth();
+  const { exitDemoMode } = useDemoMode();
   const { toast } = useToast();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [backendStatus, setBackendStatus] = useState<'UP' | 'OFFLINE' | 'CHECKING'>('CHECKING');
@@ -41,6 +46,19 @@ export function Header({ onOpenMobileMenu }: HeaderProps) {
   // Fetch unread notification count on mount and route changes
   useEffect(() => {
     let mounted = true;
+    if (isDemoMode) {
+      getDemoUnreadCount()
+        .then((count) => {
+          if (mounted) setUnreadCount(count);
+        })
+        .catch(() => {
+          if (mounted) setUnreadCount(0);
+        });
+      return () => {
+        mounted = false;
+      };
+    }
+
     getUnreadCount()
       .then((count) => {
         if (mounted) setUnreadCount(count);
@@ -51,7 +69,7 @@ export function Header({ onOpenMobileMenu }: HeaderProps) {
     return () => {
       mounted = false;
     };
-  }, [location.pathname]);
+  }, [location.pathname, isDemoMode]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -68,6 +86,13 @@ export function Header({ onOpenMobileMenu }: HeaderProps) {
     setDropdownOpen(false);
     logout();
     toast.info('You have been signed out.');
+  };
+
+  const handleExitDemo = () => {
+    setDropdownOpen(false);
+    exitDemoMode();
+    toast.info('Exited demo mode.');
+    navigate('/login');
   };
 
   const getBreadcrumbTitle = () => {
@@ -99,8 +124,11 @@ export function Header({ onOpenMobileMenu }: HeaderProps) {
         </div>
       </div>
 
-      {/* Right side: Backend health indicator & Merchant Account Dropdown */}
-      <div className="flex items-center gap-3 sm:gap-4">
+      {/* Right side: Demo badge, Backend health indicator & Merchant Account Dropdown */}
+      <div className="flex items-center gap-2.5 sm:gap-4">
+        {/* Demo Mode persistent badge */}
+        {isDemoMode && <DemoModeBadge onExit={handleExitDemo} />}
+
         {/* Backend health status badge */}
         <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800 text-[11px] font-mono">
           <Activity
@@ -154,13 +182,13 @@ export function Header({ onOpenMobileMenu }: HeaderProps) {
             aria-haspopup="true"
             aria-label="Merchant account menu"
           >
-            <Avatar name={user?.name || 'Merchant'} size="sm" />
+            <Avatar name={isDemoMode ? 'Demo Evaluator' : user?.name || 'Merchant'} size="sm" />
             <div className="hidden md:flex flex-col text-left">
               <span className="text-xs font-semibold text-white leading-none truncate max-w-[140px]">
-                {user?.name || 'Merchant'}
+                {isDemoMode ? 'Demo Evaluator' : user?.name || 'Merchant'}
               </span>
               <span className="text-[10px] text-slate-400 truncate max-w-[140px]">
-                {user?.email}
+                {isDemoMode ? 'demo@recoverai.local' : user?.email}
               </span>
             </div>
             <ChevronDown
@@ -174,15 +202,24 @@ export function Header({ onOpenMobileMenu }: HeaderProps) {
           {dropdownOpen && (
             <div className="absolute right-0 mt-2 w-64 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl py-1.5 z-50 animate-in fade-in slide-in-from-top-1">
               <div className="px-3.5 py-2.5 border-b border-slate-800/80 space-y-1">
-                <p className="text-xs font-bold text-white truncate">{user?.name}</p>
-                <p className="text-[11px] text-slate-400 truncate font-mono">{user?.email}</p>
+                <p className="text-xs font-bold text-white truncate">
+                  {isDemoMode ? 'Demo Evaluator' : user?.name}
+                </p>
+                <p className="text-[11px] text-slate-400 truncate font-mono">
+                  {isDemoMode ? 'demo@recoverai.local (Simulated)' : user?.email}
+                </p>
                 <div className="flex items-center gap-2 pt-1">
-                  <Badge variant="success" dot className="text-[10px] py-0 px-1.5">
-                    {user?.status || 'ACTIVE'}
+                  <Badge variant={isDemoMode ? 'warning' : 'success'} dot className="text-[10px] py-0 px-1.5">
+                    {isDemoMode ? 'DEMO MODE' : user?.status || 'ACTIVE'}
                   </Badge>
-                  {user?.razorpayAccountId && (
+                  {!isDemoMode && user?.razorpayAccountId && (
                     <span className="text-[10px] text-slate-400 font-mono bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800 truncate">
                       {user.razorpayAccountId}
+                    </span>
+                  )}
+                  {isDemoMode && (
+                    <span className="text-[10px] text-amber-300 font-mono bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 truncate">
+                      Sandbox
                     </span>
                   )}
                 </div>
@@ -191,19 +228,37 @@ export function Header({ onOpenMobileMenu }: HeaderProps) {
               <div className="px-1.5 py-1">
                 <div className="px-2 py-1.5 text-[11px] text-slate-400 flex items-center gap-2">
                   <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>Tenant ID: <code className="text-slate-300 font-mono">{user?.id ? `${user.id.slice(0, 8)}...` : 'N/A'}</code></span>
+                  <span>
+                    {isDemoMode ? 'Mode: Simulated Sandbox' : 'Tenant ID: '}
+                    {!isDemoMode && (
+                      <code className="text-slate-300 font-mono">
+                        {user?.id ? `${user.id.slice(0, 8)}...` : 'N/A'}
+                      </code>
+                    )}
+                  </span>
                 </div>
               </div>
 
               <div className="border-t border-slate-800/80 px-1.5 pt-1">
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-medium text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition cursor-pointer text-left"
-                >
-                  <LogOut className="w-4 h-4" />
-                  Sign Out
-                </button>
+                {isDemoMode ? (
+                  <button
+                    type="button"
+                    onClick={handleExitDemo}
+                    className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-medium text-amber-400 hover:bg-amber-500/10 hover:text-amber-300 transition cursor-pointer text-left"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Exit Demo Mode
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-medium text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition cursor-pointer text-left"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Sign Out
+                  </button>
+                )}
               </div>
             </div>
           )}

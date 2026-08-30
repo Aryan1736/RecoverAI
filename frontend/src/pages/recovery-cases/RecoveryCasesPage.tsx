@@ -10,6 +10,8 @@ import {
   User,
 } from 'lucide-react';
 import { getRecoveryCases } from '../../api/recovery-cases';
+import { getDemoRecoveryCases } from '../../api/demo';
+import { useDemoMode } from '../../hooks/useDemoMode';
 import type {
   RecoveryCase,
   RecoveryCaseStatus,
@@ -26,6 +28,7 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { ErrorState } from '../../components/ui/ErrorState';
 
 export function RecoveryCasesPage() {
+  const { isDemoMode } = useDemoMode();
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Read state from URL query parameters
@@ -50,14 +53,17 @@ export function RecoveryCasesPage() {
       setLoading(true);
       setError(null);
       try {
-        const response = await getRecoveryCases({
+        const params = {
           status: statusFilter === 'ALL' ? undefined : statusFilter,
           priority: priorityFilter === 'ALL' ? undefined : priorityFilter,
           failureReasonCategory: categorySearch.trim() || undefined,
           page,
           size: 20,
           sort: 'createdAt,desc',
-        });
+        };
+        const response = isDemoMode
+          ? await getDemoRecoveryCases(params)
+          : await getRecoveryCases(params);
         if (!cancelled) {
           setData(response);
         }
@@ -78,28 +84,31 @@ export function RecoveryCasesPage() {
     return () => {
       cancelled = true;
     };
-  }, [statusFilter, priorityFilter, categorySearch, page]);
+  }, [statusFilter, priorityFilter, categorySearch, page, isDemoMode]);
 
   const handleRefresh = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await getRecoveryCases({
+      const params = {
         status: statusFilter === 'ALL' ? undefined : statusFilter,
         priority: priorityFilter === 'ALL' ? undefined : priorityFilter,
         failureReasonCategory: categorySearch.trim() || undefined,
         page,
         size: 20,
         sort: 'createdAt,desc',
-      });
+      };
+      const response = isDemoMode
+        ? await getDemoRecoveryCases(params)
+        : await getRecoveryCases(params);
       setData(response);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to load recovery cases';
+      const message = err instanceof Error ? err.message : 'Failed to refresh recovery cases';
       setError(message);
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, priorityFilter, categorySearch, page]);
+  }, [statusFilter, priorityFilter, categorySearch, page, isDemoMode]);
 
   // Sync state to URL search parameters
   const updateUrlParams = (

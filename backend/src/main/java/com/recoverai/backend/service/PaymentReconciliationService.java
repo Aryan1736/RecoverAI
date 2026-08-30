@@ -42,6 +42,24 @@ public class PaymentReconciliationService {
     private final PaymentRepository paymentRepository;
     private final RecoveryAttemptStateMachine stateMachine;
     private final AuditService auditService;
+    private final com.recoverai.backend.service.notification.MerchantNotificationService notificationService;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public PaymentReconciliationService(RecoveryCaseRepository recoveryCaseRepository,
+                                        RecoveryAttemptRepository recoveryAttemptRepository,
+                                        RecoveryExecutionQueueRepository queueRepository,
+                                        PaymentRepository paymentRepository,
+                                        RecoveryAttemptStateMachine stateMachine,
+                                        AuditService auditService,
+                                        @org.springframework.beans.factory.annotation.Autowired(required = false) com.recoverai.backend.service.notification.MerchantNotificationService notificationService) {
+        this.recoveryCaseRepository = recoveryCaseRepository;
+        this.recoveryAttemptRepository = recoveryAttemptRepository;
+        this.queueRepository = queueRepository;
+        this.paymentRepository = paymentRepository;
+        this.stateMachine = stateMachine;
+        this.auditService = auditService;
+        this.notificationService = notificationService;
+    }
 
     public PaymentReconciliationService(RecoveryCaseRepository recoveryCaseRepository,
                                         RecoveryAttemptRepository recoveryAttemptRepository,
@@ -49,12 +67,8 @@ public class PaymentReconciliationService {
                                         PaymentRepository paymentRepository,
                                         RecoveryAttemptStateMachine stateMachine,
                                         AuditService auditService) {
-        this.recoveryCaseRepository = recoveryCaseRepository;
-        this.recoveryAttemptRepository = recoveryAttemptRepository;
-        this.queueRepository = queueRepository;
-        this.paymentRepository = paymentRepository;
-        this.stateMachine = stateMachine;
-        this.auditService = auditService;
+        this(recoveryCaseRepository, recoveryAttemptRepository, queueRepository, paymentRepository,
+                stateMachine, auditService, null);
     }
 
     /**
@@ -281,6 +295,16 @@ public class PaymentReconciliationService {
                 metadataJson,
                 clientIp
         );
+
+        // 5. Trigger PAYMENT_RECOVERED Merchant Notification safely
+        if (notificationService != null) {
+            try {
+                notificationService.notifyPaymentRecovered(merchant, savedCase, effectiveRecoveredAmount);
+            } catch (Exception ex) {
+                log.error("Failed to dispatch PAYMENT_RECOVERED notification for case id={}: {}",
+                        savedCase.getId(), ex.getMessage());
+            }
+        }
 
         log.info("Closed-loop recovery reconciliation complete for case id={}, recoveredAmount={}, reconciledAttempts={}",
                 savedCase.getId(), effectiveRecoveredAmount, reconciledAttemptIds.size());

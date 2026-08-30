@@ -1,0 +1,29 @@
+package com.recoverai.backend.repository;
+
+import com.recoverai.backend.entity.NotificationDelivery;
+import com.recoverai.backend.entity.enums.MerchantNotificationChannel;
+import com.recoverai.backend.entity.enums.NotificationDeliveryStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.Collection;
+import java.util.List;
+import java.util.UUID;
+
+@Repository
+public interface NotificationDeliveryRepository extends JpaRepository<NotificationDelivery, UUID> {
+
+    List<NotificationDelivery> findByNotificationId(UUID notificationId);
+
+    Page<NotificationDelivery> findByMerchantIdAndStatus(UUID merchantId, NotificationDeliveryStatus status, Pageable pageable);
+
+    Page<NotificationDelivery> findByChannelAndStatus(MerchantNotificationChannel channel, NotificationDeliveryStatus status, Pageable pageable);
+
+    List<NotificationDelivery> findByStatusInAndRetryCountLessThan(
+            Collection<NotificationDeliveryStatus> statuses,
+            int maxRetries,
+            Pageable pageable
+    );
+}

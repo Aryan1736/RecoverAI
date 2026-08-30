@@ -183,6 +183,37 @@ RecoverAI provides an instantaneous, frictionless "Try Interactive Demo" mode de
 
 ---
 
+## PR #24: Complete Interactive Demo Workflow
+
+PR #24 transforms the frontend-only Interactive Demo Mode into a realistic, coherent, and reactive recovery lifecycle that an evaluator can experience end-to-end:
+
+```
+Failed Payment → Recovery Case → AI Diagnosis → Recovery Strategy → Recovery Attempt → Customer Recovery → Payment Recovered
+```
+
+1. **Central Reactive Demo Store (`src/api/demo.ts`)**:
+   - Manages state in-memory with safe `localStorage` cache fallback (`recoverai_demo_store_v1`).
+   - Dispatches `recoverai:demo-state-changed` DOM custom events on mutations to reactively notify components (e.g. Header unread count).
+   - Dynamic derivation of Dashboard KPIs (`getDemoDashboard()`), Recovery Cases filtering & pagination (`getDemoRecoveryCases()`), and Analytics Overview/Trends/Channels/Failures (`getDemoAnalyticsOverview()`, etc.).
+2. **Realistic 10-Case Dataset**:
+   - 10 Indian payment failure scenarios in INR (₹) across UPI, Credit/Debit Cards, and Netbanking.
+   - Comprehensive status coverage: `OPEN`, `IN_PROGRESS`, `RECOVERED`, `FAILED`, `CANCELLED`, `EXPIRED`.
+   - Comprehensive failure reason categories: `AUTHENTICATION`, `INSUFFICIENT_FUNDS`, `NETWORK_TIMEOUT`, `USER_DROPOFF`, `BANK_DECLINED`, `CARD_EXPIRED`.
+   - Realistic autonomous Google Gemini 3.7 Flash root-cause deductions, confidence scores, multi-channel strategies, and execution timelines.
+3. **Simulate Customer Recovery Action (`src/pages/recovery-cases/RecoveryCaseDetailPage.tsx`)**:
+   - In `RecoveryCaseDetailPage`, an evaluator can trigger the interactive recovery simulation for eligible cases (`OPEN` or `IN_PROGRESS`).
+   - 4-stage realistic progression: Link accessed → Payment instrument selected → Gateway authorization & capture confirmed → Closed-loop case resolution.
+   - Updates payment (`FAILED` → `CAPTURED`), case (`OPEN`/`IN_PROGRESS` → `RECOVERED`), attempt (`DELIVERED`/`SENT` → `SUCCESS`), timestamps, and generates a deduplicated `PAYMENT_RECOVERED` notification.
+4. **Terminal Case Protection**:
+   - Prevents simulation of already `RECOVERED`, `CANCELLED`, `EXPIRED`, or `FAILED` cases with clear explanatory UI tooltips and badges.
+5. **Real-time Navigation & Dashboard Synchronization**:
+   - Header unread count badge increments immediately via custom event.
+   - Overview Dashboard KPIs (recovered revenue, recovery rate, active cases) recalculate dynamically from the central store without page reloads.
+6. **Zero Backend Mutations Guarantee**:
+   - 100% frontend-only. Zero network calls to backend database, zero real payment charges, zero SMS/WhatsApp provider dispatches.
+
+---
+
 ## Setup & Commands
 
 ### Prerequisites
@@ -214,7 +245,7 @@ Development server runs at `http://localhost:5173`.
 ```bash
 npm test -- --run
 ```
-Executes all 122 Vitest unit, component, routing, analytics, recovery case, notification, preferences, provider status, and interactive demo mode test suites in headless JSDOM mode across 19 test files.
+Executes all 135 Vitest unit, component, routing, analytics, recovery case, notification, preferences, provider status, and interactive demo mode workflow test suites in headless JSDOM mode across 20 test files.
 
 ### Production Build
 ```bash

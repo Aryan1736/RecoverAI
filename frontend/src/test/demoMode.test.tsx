@@ -18,6 +18,7 @@ import { AnalyticsPage } from '../pages/analytics/AnalyticsPage';
 import { Header } from '../components/layout/Header';
 import { DemoModeBadge } from '../components/layout/DemoModeBadge';
 import { apiClient, TOKEN_STORAGE_KEY, MERCHANT_STORAGE_KEY, setStoredToken, setStoredMerchant } from '../api/client';
+import { resetDemoStore } from '../api/demo';
 import * as authApi from '../api/auth';
 import * as analyticsApi from '../api/analytics';
 import type { Merchant } from '../types/auth';
@@ -47,11 +48,13 @@ function DemoConsumerComponent() {
 describe('PR #23: Interactive Demo Mode', () => {
   beforeEach(() => {
     localStorage.clear();
+    resetDemoStore();
     vi.clearAllMocks();
   });
 
   afterEach(() => {
     localStorage.clear();
+    resetDemoStore();
   });
 
   describe('1. Demo Session Lifecycle & Persistence', () => {
@@ -471,7 +474,7 @@ describe('PR #23: Interactive Demo Mode', () => {
       // Wait for analytics data to render
       await waitFor(() => {
         expect(screen.getByText(/Analytics & Intelligence/i)).toBeInTheDocument();
-        expect(screen.getByText('38')).toBeInTheDocument(); // total cases from DEMO_ANALYTICS_OVERVIEW
+        expect(screen.getByText('10')).toBeInTheDocument(); // total cases from dynamic central demo store
       });
 
       // Assert error state is NOT shown
@@ -502,7 +505,7 @@ describe('PR #23: Interactive Demo Mode', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText('38')).toBeInTheDocument();
+        expect(screen.getByText('10')).toBeInTheDocument();
       });
 
       // Click "Last 7 Days" preset

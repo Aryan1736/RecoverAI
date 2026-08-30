@@ -9,7 +9,7 @@ import { Badge } from '../ui/Badge';
 import { DemoModeBadge } from './DemoModeBadge';
 import { fetchHealth } from '../../api/auth';
 import { getUnreadCount } from '../../api/notifications';
-import { getDemoUnreadCount } from '../../api/demo';
+import { getDemoUnreadCount, DEMO_STATE_EVENT } from '../../api/demo';
 
 export interface HeaderProps {
   onOpenMobileMenu: () => void;
@@ -47,15 +47,21 @@ export function Header({ onOpenMobileMenu }: HeaderProps) {
   useEffect(() => {
     let mounted = true;
     if (isDemoMode) {
-      getDemoUnreadCount()
-        .then((count) => {
-          if (mounted) setUnreadCount(count);
-        })
-        .catch(() => {
-          if (mounted) setUnreadCount(0);
-        });
+      const updateUnread = () => {
+        getDemoUnreadCount()
+          .then((count) => {
+            if (mounted) setUnreadCount(count);
+          })
+          .catch(() => {
+            if (mounted) setUnreadCount(0);
+          });
+      };
+
+      updateUnread();
+      window.addEventListener(DEMO_STATE_EVENT, updateUnread);
       return () => {
         mounted = false;
+        window.removeEventListener(DEMO_STATE_EVENT, updateUnread);
       };
     }
 

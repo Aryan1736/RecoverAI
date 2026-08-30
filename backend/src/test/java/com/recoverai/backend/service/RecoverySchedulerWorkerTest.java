@@ -12,8 +12,8 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 class RecoverySchedulerWorkerTest {
 
     @Test
-    @DisplayName("runSchedulerCycle should invoke pollAndExecuteDueAttempts when enabled")
-    void shouldInvokePollAndExecuteDueAttemptsWhenEnabled() {
+    @DisplayName("runSchedulerCycle should NOT invoke pollAndExecuteDueAttempts (worker consolidation)")
+    void runSchedulerCycleShouldNotInvokeDirectExecution() {
         AtomicInteger pollCalls = new AtomicInteger(0);
 
         RecoverySchedulerProperties properties = new RecoverySchedulerProperties(true, 5000L, 50);
@@ -28,43 +28,19 @@ class RecoverySchedulerWorkerTest {
         RecoverySchedulerWorker worker = new RecoverySchedulerWorker(testService, properties);
         worker.runSchedulerCycle();
 
-        assertThat(pollCalls.get()).isEqualTo(1);
-    }
-
-    @Test
-    @DisplayName("runSchedulerCycle should not invoke pollAndExecuteDueAttempts when disabled")
-    void shouldNotInvokePollWhenDisabled() {
-        AtomicInteger pollCalls = new AtomicInteger(0);
-
-        RecoverySchedulerProperties properties = new RecoverySchedulerProperties(false, 5000L, 50);
-        RecoverySchedulerService testService = new RecoverySchedulerService(
-                null, null, null, null, null, null, properties) {
-            @Override
-            public int pollAndExecuteDueAttempts() {
-                return pollCalls.incrementAndGet();
-            }
-        };
-
-        RecoverySchedulerWorker worker = new RecoverySchedulerWorker(testService, properties);
-        worker.runSchedulerCycle();
-
+        // Must be 0 because legacy direct execution polling is decommissioned
         assertThat(pollCalls.get()).isEqualTo(0);
+        assertThat(worker.isDecommissioned()).isTrue();
     }
 
     @Test
-    @DisplayName("runSchedulerCycle should handle unexpected exception gracefully without rethrowing")
-    void shouldHandleUnexpectedExceptionGracefully() {
+    @DisplayName("runSchedulerCycle should handle calls safely without throwing exceptions")
+    void shouldHandleCallsGracefullyWithoutExceptions() {
         RecoverySchedulerProperties properties = new RecoverySchedulerProperties(true, 5000L, 50);
-        RecoverySchedulerService failingService = new RecoverySchedulerService(
-                null, null, null, null, null, null, properties) {
-            @Override
-            public int pollAndExecuteDueAttempts() {
-                throw new RuntimeException("Simulated unexpected polling failure");
-            }
-        };
+        RecoverySchedulerService testService = new RecoverySchedulerService(
+                null, null, null, null, null, null, properties);
 
-        RecoverySchedulerWorker worker = new RecoverySchedulerWorker(failingService, properties);
-
+        RecoverySchedulerWorker worker = new RecoverySchedulerWorker(testService, properties);
         assertDoesNotThrow(worker::runSchedulerCycle);
     }
 }

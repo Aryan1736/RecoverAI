@@ -112,4 +112,38 @@ public interface RecoveryExecutionQueueRepository extends JpaRepository<Recovery
             "q.claimedAt = NULL, q.claimedBy = NULL, q.startedAt = NULL, q.updatedAt = :now " +
             "WHERE q.id = :id AND (q.status = com.recoverai.backend.entity.enums.RecoveryQueueStatus.CLAIMED OR q.status = com.recoverai.backend.entity.enums.RecoveryQueueStatus.PROCESSING)")
     int requeueStaleClaim(@Param("id") UUID id, @Param("now") Instant now);
+
+    @Query("SELECT q FROM RecoveryExecutionQueueItem q " +
+            "WHERE q.merchant.id = :merchantId AND q.status = com.recoverai.backend.entity.enums.RecoveryQueueStatus.DEAD_LETTER " +
+            "AND (:caseId IS NULL OR q.recoveryCase.id = :caseId) " +
+            "AND (:errorCode IS NULL OR q.lastErrorCode = :errorCode) " +
+            "ORDER BY q.createdAt DESC")
+    Page<RecoveryExecutionQueueItem> findDeadLetterItems(
+            @Param("merchantId") UUID merchantId,
+            @Param("caseId") UUID caseId,
+            @Param("errorCode") String errorCode,
+            Pageable pageable);
+
+    @Query("SELECT q FROM RecoveryExecutionQueueItem q LEFT JOIN FETCH q.recoveryAttempt LEFT JOIN FETCH q.recoveryCase " +
+            "WHERE q.id = :id AND q.merchant.id = :merchantId AND q.status = :status")
+    Optional<RecoveryExecutionQueueItem> findByIdAndMerchantIdAndStatus(
+            @Param("id") UUID id,
+            @Param("merchantId") UUID merchantId,
+            @Param("status") RecoveryQueueStatus status);
+
+    @Query("SELECT q FROM RecoveryExecutionQueueItem q LEFT JOIN FETCH q.recoveryAttempt LEFT JOIN FETCH q.recoveryCase " +
+            "WHERE q.id = :id AND q.merchant.id = :merchantId")
+    Optional<RecoveryExecutionQueueItem> findByIdAndMerchantIdWithDetails(
+            @Param("id") UUID id,
+            @Param("merchantId") UUID merchantId);
+
+    @Modifying(flushAutomatically = true)
+    @Query("UPDATE RecoveryExecutionQueueItem q SET q.status = com.recoverai.backend.entity.enums.RecoveryQueueStatus.READY, " +
+            "q.availableAt = :availableAt, q.retryCount = 0, q.claimedAt = NULL, q.claimedBy = NULL, q.startedAt = NULL, q.completedAt = NULL, " +
+            "q.lastErrorCode = NULL, q.lastErrorMessage = NULL, q.updatedAt = :now " +
+            "WHERE q.id = :id AND q.merchant.id = :merchantId AND q.status = com.recoverai.backend.entity.enums.RecoveryQueueStatus.DEAD_LETTER")
+    int redriveItem(@Param("id") UUID id,
+                    @Param("merchantId") UUID merchantId,
+                    @Param("availableAt") Instant availableAt,
+                    @Param("now") Instant now);
 }

@@ -3,9 +3,20 @@ package com.recoverai.backend.service;
 import com.recoverai.backend.config.RecoverySchedulerProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+/**
+ * Legacy Recovery Scheduler Background Worker.
+ *
+ * <p>DECOMMISSIONED in PR #17 (Worker Consolidation):
+ * The duplicate direct-execution polling mechanism has been decommissioned so that there is
+ * only ONE authoritative background execution mechanism:
+ * {@link RecoverySchedulerService} -&gt; {@link RecoveryExecutionQueueService} -&gt;
+ * {@link RecoveryExecutionQueueWorker} -&gt; Action Executors.
+ *
+ * <p>Retained for backward compatibility without active {@code @Scheduled} background execution.
+ */
+@Deprecated(since = "PR-17", forRemoval = false)
 @Component
 public class RecoverySchedulerWorker {
 
@@ -20,17 +31,25 @@ public class RecoverySchedulerWorker {
         this.properties = properties;
     }
 
-    @Scheduled(fixedDelayString = "${recoverai.recovery.scheduler.polling-interval-ms:5000}")
+    /**
+     * Legacy cycle invocation.
+     * Decommissioned to prevent duplicate execution of recovery attempts.
+     * Background execution is authoritatively handled by {@link RecoveryExecutionQueueWorker}.
+     */
     public void runSchedulerCycle() {
-        if (properties != null && !properties.isEnabled()) {
-            log.trace("Recovery scheduler background worker is disabled, skipping cycle.");
-            return;
-        }
+        log.debug("Legacy RecoverySchedulerWorker cycle called, but direct execution is decommissioned in favor of RecoveryExecutionQueueWorker.");
+        // Decommissioned: no duplicate execution against recovery_attempts directly.
+    }
 
-        try {
-            recoverySchedulerService.pollAndExecuteDueAttempts();
-        } catch (Exception ex) {
-            log.error("Unexpected error in recovery scheduler polling cycle: {}", ex.getMessage(), ex);
-        }
+    public boolean isDecommissioned() {
+        return true;
+    }
+
+    public RecoverySchedulerService getRecoverySchedulerService() {
+        return recoverySchedulerService;
+    }
+
+    public RecoverySchedulerProperties getProperties() {
+        return properties;
     }
 }

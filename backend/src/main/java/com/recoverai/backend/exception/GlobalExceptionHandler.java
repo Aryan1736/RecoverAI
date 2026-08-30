@@ -124,6 +124,17 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
     }
 
+    @ExceptionHandler(DeadLetterQueueItemNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleDeadLetterQueueItemNotFoundException(DeadLetterQueueItemNotFoundException ex) {
+        log.warn("Dead letter queue item not found: {}", ex.getMessage());
+        ApiErrorResponse response = new ApiErrorResponse(
+                HttpStatus.NOT_FOUND.value(),
+                "Not Found",
+                ex.getMessage()
+        );
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+    }
+
     @ExceptionHandler(DiagnosisValidationException.class)
     public ResponseEntity<ApiErrorResponse> handleDiagnosisValidationException(DiagnosisValidationException ex) {
         log.warn("Diagnosis validation failure: {}", ex.getMessage());

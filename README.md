@@ -1317,6 +1317,7 @@ The asynchronous recovery execution queue records structured audit events with `
   - `feature/strategy-execution-integration`: Strategy-Driven Recovery Execution Integration (Flyway V10 `strategy_snapshot` and `strategy_id` migration, `RecoveryStrategySnapshot` immutable policy snapshot, strategy-aware orchestration & scheduling, delay resolution, atomic worker execution, fallback audit trails, and multi-tenant security guarantees).
   - `feature/recovery-queue`: Asynchronous Recovery Execution Queue (Flyway V11 `recovery_execution_queue` migration, `RecoveryExecutionQueueItem` entity, distributed atomic claiming, strategy snapshot authority, terminal case protection, retry/dead-letter policy, crash recovery, multi-tenant isolation, and complete automated concurrency test suites).
   - `feature/payment-reconciliation`: Payment Reconciliation & Closed-Loop Recovery State Updates (`PaymentReconciliationService`, Razorpay webhook `payment.captured` & `order.paid` ingestion, recovery link checkout resolution, closed-loop atomic transitions across Payment, RecoveryCase, RecoveryAttempt, and RecoveryExecutionQueue, race-condition safety, multi-tenant isolation, and complete automated test suite).
+  - `feature/dlq-redrive-fallback`: Dead-Letter Queue Redrive, Worker Consolidation & Strategy Fallback Triggering (`RecoveryDeadLetterQueueService`, `RecoveryDeadLetterQueueController`, worker consolidation, deterministic strategy fallback cascade, atomic DLQ redrive, multi-tenant security, credential masking, Flyway V12 migration, and complete automated test suite).
 
 ---
 
@@ -1393,6 +1394,133 @@ The **Payment Reconciliation Engine** closes the loop between external payment g
 
 6. **Audit Trail**:
    - Emits structured `RECOVERY_PAYMENT_RECONCILED` audit logs containing authoritative recovery metadata (case ID, payment ID, razorpay payment ID, reconciled attempt IDs, recovered amount) with zero credentials or sensitive payload secrets.
+
+---
+
+## Dead-Letter Queue Redrive, Worker Consolidation & Strategy Fallback Triggering (PR #17)
+
+PR #17 completes RecoverAI's operational resilience architecture by consolidating background execution paths, automating deterministic multi-channel fallback cascading upon permanent provider failure or retry exhaustion, providing dead-letter queue (DLQ) inspection and concurrency-safe atomic redrive APIs, and establishing an auditable recovery lifecycle.
+
+```
+                  ┌─────────────────────────────────────┐
+                  │      RecoverySchedulerService       │
+                  │   (scheduleRecovery / due attempt)  │
+                  └──────────────────┬──────────────────┘
+                                     │
+                                     ▼ enqueues READY
+                  ┌─────────────────────────────────────┐
+                  │    RecoveryExecutionQueueService    │
+                  │    (durable DB queue, claim & run)  │
+                  └──────────────────┬──────────────────┘
+                                     │
+                                     ▼ claims & processes
+                  ┌─────────────────────────────────────┐
+                  │    RecoveryExecutionQueueWorker     │
+                  │ (Sole Authoritative Execution Path) │
+                  └──────────────────┬──────────────────┘
+                                     │
+                                     ▼ executes attempt
+                  ┌─────────────────────────────────────┐
+                  │       RecoveryActionExecutor        │
+                  │ (WhatsApp, Email, SMS, SmartLink...)│
+                  └──────┬──────────────────────┬───────┘
+                         │                      │
+       Success / Sent    │                      │ Permanent Failure /
+                         ▼                      │ Retry Exhaustion
+             ┌───────────────────────┐          ▼
+             │       COMPLETED       │ ┌──────────────────────────────────┐
+             │  (queue item retired) │ │           DEAD_LETTER            │
+             └───────────────────────┘ └────────┬─────────────────────────┘
+                                                │
+                 ┌──────────────────────────────┴──────────────────────────────┐
+                 │                                                             │
+                 ▼                                                             ▼
+  ┌──────────────────────────────┐                              ┌──────────────────────────────┐
+  │   Deterministic Fallback     │                              │      Manual/API Redrive      │
+  │   Trigger (Strategy Engine)  │                              │ POST .../dead-letter/{id}/   │
+  │   Hierarchy: WHATSAPP        │                              │      redrive (Atomic UPDATE) │
+  │     -> EMAIL -> SMS          │                              └──────────────┬───────────────┘
+  │     -> SMART_LINK -> MANUAL  │                                             │
+  │   (No AI/Gemini calls)       │                                             ▼
+  └──────────────┬───────────────┘                              ┌──────────────────────────────┐
+                 │                                              │      Reset to READY          │
+                 ▼ enqueues Attempt #N+1                        │      (Counters cleared)      │
+  ┌──────────────────────────────┐                              └──────────────────────────────┘
+  │      New Queue Item READY    │
+  └──────────────────────────────┘
+```
+
+### 1. Worker Consolidation (Single Authoritative Execution Mechanism)
+
+- **Problem Solved**: Previously, both `RecoverySchedulerWorker` (polling `recovery_attempts` directly) and `RecoveryExecutionQueueWorker` (polling `recovery_execution_queue`) executed recovery actions in parallel, risking duplicate dispatches and race conditions.
+- **Consolidation**:
+  - `RecoverySchedulerWorker` background `@Scheduled` runner has been decommissioned (`isDecommissioned() == true`), preserving scheduling and validation APIs without direct execution polling.
+  - `RecoverySchedulerService.pollAndExecuteDueAttempts()` is deprecated.
+  - `RecoveryExecutionQueueWorker` is now the **sole authoritative execution engine**, operating against durable DB queue items with distributed claim locks and crash recovery.
+  - All scheduling APIs (`scheduleRecovery`, automated scheduler) route through `RecoveryExecutionQueueService.enqueueAttempt()`.
+
+### 2. Deterministic Strategy Fallback Triggering
+
+When an action permanently fails (e.g. invalid phone number, provider validation error, authentication failure) or exhausts its maximum configured retries, RecoverAI triggers strategy fallback:
+- **Hierarchy Order**: `WHATSAPP` -> `EMAIL` -> `SMS` -> `SMART_LINK` -> `MANUAL`.
+- **Snapshot & Hierarchy Authority**: Evaluates channel viability (e.g. valid phone required for WhatsApp/SMS, valid email for Email) and previous attempt history.
+- **Zero AI Overhead**: Fallback execution is completely deterministic, executing within milliseconds without calling Google Gemini or consuming AI tokens.
+- **Infinite Loop Prevention & Max Attempts**: Strictly adheres to the strategy's `max_attempts` ceiling. If all viable channels have been tried or the attempt limit is reached, emits `RECOVERY_STRATEGY_FALLBACK_EXHAUSTED` and halts execution.
+- **Terminal Case Protection**: Recovery cases in terminal states (`RECOVERED`, `CANCELLED`, `EXPIRED`) immediately abort fallback triggering.
+- **Durable Scheduling**: The fallback attempt (#N+1) is persisted with a strategy snapshot and enqueued as `READY` in `recovery_execution_queue`.
+
+### 3. Dead-Letter Queue (DLQ) Management & APIs
+
+RecoverAI provides merchant-scoped dead-letter queue inspection and replaying capabilities:
+
+#### A. List Dead-Letter Queue Items
+```http
+GET /api/v1/recovery-queue/dead-letter?caseId={caseId}&errorCode={errorCode}&page=0&size=20
+GET /api/v1/merchants/{merchantId}/recovery-queue/dead-letter
+```
+- Returns paginated `DeadLetterQueueItemResponseDto` items scoped to the authenticated merchant.
+- Filterable by `caseId` and `errorCode`.
+
+#### B. Get Dead-Letter Item Detail
+```http
+GET /api/v1/recovery-queue/dead-letter/{id}
+GET /api/v1/merchants/{merchantId}/recovery-queue/dead-letter/{id}
+```
+- Safe item details including failure error code, sanitized error message, execution attempt details, and recovery case reference.
+- Returns `404 Not Found` for cross-tenant access.
+
+#### C. Redrive Dead-Letter Item
+```http
+POST /api/v1/recovery-queue/dead-letter/{id}/redrive
+POST /api/v1/merchants/{merchantId}/recovery-queue/dead-letter/{id}/redrive
+```
+- Replays a dead-letter item safely back into active execution:
+  1. Validates that the associated `RecoveryCase` is NOT terminal (`400 Bad Request` if `RECOVERED`, `CANCELLED`, or `EXPIRED`).
+  2. Idempotently returns safe state if the item is already `READY`.
+  3. Executes an atomic conditional database update (`UPDATE recovery_execution_queue SET status = 'READY', retry_count = 0, available_at = :now WHERE id = :id AND merchant_id = :merchantId AND status = 'DEAD_LETTER'`).
+  4. Guarantees **single-winner semantics** under high concurrency: exactly one request performs the transition, while concurrent callers safely receive the updated `READY` item without duplicate processing or duplicate audits.
+  5. Transitions the associated `RecoveryAttempt` back to `SCHEDULED` for immediate processing by `RecoveryExecutionQueueWorker`.
+
+### 4. Security & Sanitization Guarantees
+
+- **Strict Multi-Tenancy**: All queries enforce merchant tenant boundaries (`merchant_id`). Cross-tenant item inspection or redrive requests return `404 Not Found`. Explicit mismatch between JWT claims and `X-Merchant-Id` headers returns `403 Forbidden`.
+- **Sensitive Data Masking**: Bearer tokens, API keys, passwords, credentials, and secrets appearing in provider error messages or raw payloads are sanitized via regex masking (`[REDACTED]`) before being returned in API responses or recorded in audit events.
+
+### 5. Audit Event Catalog
+
+| Event Type | Actor Type | Trigger Description |
+| :--- | :--- | :--- |
+| `RECOVERY_EXECUTION_DEAD_LETTERED` | `SYSTEM` | Queue item transitioned to `DEAD_LETTER` after retry exhaustion or permanent failure. |
+| `RECOVERY_EXECUTION_REDRIVE_REQUESTED` | `USER` | Merchant user requested manual redrive for a dead-letter item. |
+| `RECOVERY_EXECUTION_REDRIVEN` | `USER` | Queue item successfully transitioned from `DEAD_LETTER` back to `READY`. |
+| `RECOVERY_STRATEGY_FALLBACK_SELECTED` | `SYSTEM` | Automatic fallback channel selected and scheduled as a new queue attempt. |
+| `RECOVERY_STRATEGY_FALLBACK_EXHAUSTED` | `SYSTEM` | Fallback cascading halted due to exhausting all channels or reaching max attempts. |
+| `RECOVERY_EXECUTION_FALLBACK_FAILED` | `SYSTEM` | A previously selected fallback attempt failed execution. |
+
+### 6. Database Migrations (Flyway V12)
+
+- **`V12__create_recovery_dlq_indexes.sql`**: Adds composite index `idx_recovery_queue_dlq_lookup` on `recovery_execution_queue(merchant_id, status, created_at DESC)` for sub-millisecond DLQ listing and filtering under heavy loads.
+
 
 
 

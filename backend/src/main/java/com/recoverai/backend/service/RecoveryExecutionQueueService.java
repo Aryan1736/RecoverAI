@@ -2,14 +2,19 @@ package com.recoverai.backend.service;
 
 import com.recoverai.backend.config.RecoveryCommunicationProperties;
 import com.recoverai.backend.config.RecoveryQueueProperties;
+import com.recoverai.backend.config.RecoveryStrategyProperties;
+import com.recoverai.backend.dto.strategy.RecoveryStrategySnapshot;
+import com.recoverai.backend.entity.Customer;
 import com.recoverai.backend.entity.Merchant;
 import com.recoverai.backend.entity.RecoveryAttempt;
 import com.recoverai.backend.entity.RecoveryCase;
 import com.recoverai.backend.entity.RecoveryExecutionQueueItem;
+import com.recoverai.backend.entity.RecoveryStrategy;
 import com.recoverai.backend.entity.enums.ActorType;
 import com.recoverai.backend.entity.enums.RecoveryAttemptStatus;
 import com.recoverai.backend.entity.enums.RecoveryCaseStatus;
 import com.recoverai.backend.entity.enums.RecoveryChannel;
+import com.recoverai.backend.entity.enums.RecoveryPriority;
 import com.recoverai.backend.entity.enums.RecoveryQueueStatus;
 import com.recoverai.backend.exception.InvalidRecoveryCaseStateException;
 import com.recoverai.backend.exception.RecoveryCaseNotFoundException;
@@ -28,6 +33,15 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -58,6 +72,7 @@ public class RecoveryExecutionQueueService {
     private final AuditService auditService;
     private final RecoveryQueueProperties properties;
     private final RecoveryCommunicationProperties communicationProperties;
+    private final RecoveryStrategyProperties strategyProperties;
 
     @Autowired(required = false)
     @org.springframework.context.annotation.Lazy
@@ -71,7 +86,19 @@ public class RecoveryExecutionQueueService {
                                          AuditService auditService,
                                          RecoveryQueueProperties properties) {
         this(queueRepository, recoveryAttemptRepository, recoveryCaseRepository,
-                actionExecutors, defaultActionExecutor, auditService, properties, null);
+                actionExecutors, defaultActionExecutor, auditService, properties, null, null);
+    }
+
+    public RecoveryExecutionQueueService(RecoveryExecutionQueueRepository queueRepository,
+                                         RecoveryAttemptRepository recoveryAttemptRepository,
+                                         RecoveryCaseRepository recoveryCaseRepository,
+                                         List<RecoveryActionExecutor> actionExecutors,
+                                         DefaultRecoveryActionExecutor defaultActionExecutor,
+                                         AuditService auditService,
+                                         RecoveryQueueProperties properties,
+                                         RecoveryCommunicationProperties communicationProperties) {
+        this(queueRepository, recoveryAttemptRepository, recoveryCaseRepository,
+                actionExecutors, defaultActionExecutor, auditService, properties, communicationProperties, null);
     }
 
     @Autowired
@@ -82,7 +109,8 @@ public class RecoveryExecutionQueueService {
                                          DefaultRecoveryActionExecutor defaultActionExecutor,
                                          AuditService auditService,
                                          RecoveryQueueProperties properties,
-                                         @Autowired(required = false) RecoveryCommunicationProperties communicationProperties) {
+                                         @Autowired(required = false) RecoveryCommunicationProperties communicationProperties,
+                                         @Autowired(required = false) RecoveryStrategyProperties strategyProperties) {
         this.queueRepository = queueRepository;
         this.recoveryAttemptRepository = recoveryAttemptRepository;
         this.recoveryCaseRepository = recoveryCaseRepository;
@@ -91,6 +119,7 @@ public class RecoveryExecutionQueueService {
         this.auditService = auditService;
         this.properties = properties != null ? properties : new RecoveryQueueProperties();
         this.communicationProperties = communicationProperties;
+        this.strategyProperties = strategyProperties != null ? strategyProperties : new RecoveryStrategyProperties();
     }
 
     public RecoveryExecutionQueueItem enqueueAttempt(RecoveryAttempt attempt, Instant availableAt) {
@@ -130,6 +159,12 @@ public class RecoveryExecutionQueueService {
 
         try {
             RecoveryExecutionQueueItem saved = queueRepository.saveAndFlush(queueItem);
+            if (saved == null) {
+                saved = queueItem;
+            }
+            if (saved.getId() == null) {
+                saved.setId(UUID.randomUUID());
+            }
             String queueItemIdStr = saved.getId().toString();
             String attemptIdStr = attemptId.toString();
 
@@ -617,7 +652,277 @@ public class RecoveryExecutionQueueService {
                     String.format("Attempt failed: %s", errorMessage),
                     null
             );
+
+            // Audit fallback failure if the failing attempt was itself a fallback
+            boolean wasFallbackAttempt = (attempt.getAttemptNumber() > 1)
+                    || (attempt.getMetadata() != null && attempt.getMetadata().contains("\"isFallback\":true"));
+            if (wasFallbackAttempt) {
+                auditService.recordEvent(
+                        merchant,
+                        "RECOVERY_EXECUTION_FALLBACK_FAILED",
+                        ActorType.SYSTEM,
+                        properties.getWorkerId(),
+                        "RecoveryAttempt",
+                        attemptIdStr,
+                        "FAIL_FALLBACK",
+                        String.format("Fallback execution on channel %s failed for attempt #%d: %s",
+                                attempt.getChannel(), attempt.getAttemptNumber(), errorMessage),
+                        null
+                );
+            }
+
+            // Trigger deterministic Strategy Fallback
+            triggerStrategyFallbackIfEligible(queueItem, attempt, merchant, errorCode, errorMessage);
         }
+    }
+
+    private void triggerStrategyFallbackIfEligible(RecoveryExecutionQueueItem queueItem,
+                                                   RecoveryAttempt failedAttempt,
+                                                   Merchant merchant,
+                                                   String errorCode,
+                                                   String errorMessage) {
+        RecoveryCase recoveryCase = queueItem.getRecoveryCase();
+        String attemptIdStr = failedAttempt.getId() != null ? failedAttempt.getId().toString() : "UNKNOWN";
+
+        // 1. Guard: Check terminal recovery case
+        if (recoveryCase == null || TERMINAL_CASE_STATUSES.contains(recoveryCase.getStatus())) {
+            log.info("RecoveryCase id={} is terminal ({}), aborting fallback strategy selection",
+                    recoveryCase != null ? recoveryCase.getId() : null,
+                    recoveryCase != null ? recoveryCase.getStatus() : null);
+            return;
+        }
+
+        // 2. Guard: Strict multi-tenant isolation
+        if (recoveryCase.getMerchant() == null || !recoveryCase.getMerchant().getId().equals(merchant.getId())) {
+            log.error("Tenant mismatch between recovery case and merchant during fallback for attempt id={}", attemptIdStr);
+            return;
+        }
+
+        // 3. Guard: Strategy fallback enabled configuration
+        if (strategyProperties != null && !strategyProperties.isFallbackEnabled()) {
+            log.info("Strategy fallback is disabled by configuration, skipping fallback for case id={}", recoveryCase.getId());
+            return;
+        }
+
+        // 4. Inspect strategy snapshot and strategy
+        RecoveryStrategy strategy = failedAttempt.getStrategy();
+        RecoveryStrategySnapshot snapshot = RecoveryStrategySnapshot.fromJson(failedAttempt.getStrategySnapshot());
+
+        int maxAttempts = 3;
+        if (strategy != null && strategy.getMaxAttempts() > 0) {
+            maxAttempts = strategy.getMaxAttempts();
+        } else if (strategyProperties != null && strategyProperties.getMaxAttempts() > 0) {
+            maxAttempts = strategyProperties.getMaxAttempts();
+        }
+
+        List<RecoveryAttempt> previousAttempts = recoveryAttemptRepository
+                .findByRecoveryCaseIdOrderByAttemptNumberAsc(recoveryCase.getId());
+        int previousAttemptCount = previousAttempts != null ? previousAttempts.size() : 1;
+
+        if (previousAttemptCount >= maxAttempts) {
+            log.info("Maximum recovery attempts reached ({}/{}) for case id={}, exhausting fallback",
+                    previousAttemptCount, maxAttempts, recoveryCase.getId());
+            auditService.recordEvent(
+                    merchant,
+                    "RECOVERY_STRATEGY_FALLBACK_EXHAUSTED",
+                    ActorType.SYSTEM,
+                    properties.getWorkerId(),
+                    "RecoveryCase",
+                    recoveryCase.getId().toString(),
+                    "EXHAUST_FALLBACK",
+                    String.format("Maximum recovery attempts (%d) reached for case %s; no further fallback attempts will be scheduled",
+                            maxAttempts, recoveryCase.getId()),
+                    null
+            );
+            return;
+        }
+
+        // 5. Compute channel failure counts from previous attempts
+        Map<RecoveryChannel, Integer> channelFailures = new EnumMap<>(RecoveryChannel.class);
+        if (previousAttempts != null) {
+            for (RecoveryAttempt prev : previousAttempts) {
+                if (prev.getStatus() == RecoveryAttemptStatus.FAILED && prev.getChannel() != null) {
+                    channelFailures.put(prev.getChannel(), channelFailures.getOrDefault(prev.getChannel(), 0) + 1);
+                }
+            }
+        }
+        if (failedAttempt.getChannel() != null) {
+            channelFailures.put(failedAttempt.getChannel(), channelFailures.getOrDefault(failedAttempt.getChannel(), 0) + 1);
+        }
+
+        int maxChannelFailures = strategyProperties != null && strategyProperties.getMaxChannelFailures() > 0
+                ? strategyProperties.getMaxChannelFailures() : 1;
+
+        Customer customer = recoveryCase.getCustomer();
+        boolean hasPhone = customer != null && customer.getPhone() != null && !customer.getPhone().trim().isEmpty();
+        boolean hasEmail = customer != null && customer.getEmail() != null && !customer.getEmail().trim().isEmpty();
+
+        // 6. Resolve next fallback channel deterministically
+        RecoveryChannel selectedFallbackChannel = null;
+        String selectedFallbackAction = null;
+
+        // Try snapshot fallback first if designated and viable
+        if (snapshot != null && snapshot.getFallbackChannel() != null) {
+            RecoveryChannel candidate = snapshot.getFallbackChannel();
+            if (isChannelViable(candidate, hasPhone, hasEmail, channelFailures, maxChannelFailures)) {
+                selectedFallbackChannel = candidate;
+                selectedFallbackAction = snapshot.getFallbackAction() != null
+                        ? snapshot.getFallbackAction()
+                        : defaultActionForChannel(candidate);
+            }
+        }
+
+        // If snapshot fallback was not viable or absent, use the deterministic hierarchy:
+        // WHATSAPP -> EMAIL -> SMS -> SMART_LINK -> MANUAL
+        if (selectedFallbackChannel == null) {
+            List<RecoveryChannel> hierarchy = List.of(
+                    RecoveryChannel.WHATSAPP,
+                    RecoveryChannel.EMAIL,
+                    RecoveryChannel.SMS,
+                    RecoveryChannel.SMART_LINK,
+                    RecoveryChannel.MANUAL
+            );
+
+            for (RecoveryChannel candidate : hierarchy) {
+                if (candidate != failedAttempt.getChannel() && isChannelViable(candidate, hasPhone, hasEmail, channelFailures, maxChannelFailures)) {
+                    selectedFallbackChannel = candidate;
+                    selectedFallbackAction = defaultActionForChannel(candidate);
+                    break;
+                }
+            }
+        }
+
+        // 7. If no viable fallback channel remains, record exhaustion
+        if (selectedFallbackChannel == null) {
+            log.info("No viable fallback channel remains for case id={}, exhausting fallback", recoveryCase.getId());
+            auditService.recordEvent(
+                    merchant,
+                    "RECOVERY_STRATEGY_FALLBACK_EXHAUSTED",
+                    ActorType.SYSTEM,
+                    properties.getWorkerId(),
+                    "RecoveryCase",
+                    recoveryCase.getId().toString(),
+                    "EXHAUST_FALLBACK",
+                    String.format("All fallback channels exhausted for case %s (phoneAvailable=%s, emailAvailable=%s)",
+                            recoveryCase.getId(), hasPhone, hasEmail),
+                    null
+            );
+            return;
+        }
+
+        // 8. Create next strategy snapshot & attempt deterministically
+        int nextAttemptNumber = previousAttemptCount + 1;
+        Instant now = Instant.now();
+
+        RecoveryChannel nextFallback = computeNextFallbackInHierarchy(selectedFallbackChannel);
+        String nextFallbackAction = defaultActionForChannel(nextFallback);
+
+        RecoveryStrategySnapshot nextSnapshot = RecoveryStrategySnapshot.builder()
+                .strategyId(snapshot != null && snapshot.getStrategyId() != null
+                        ? snapshot.getStrategyId()
+                        : (strategy != null ? strategy.getId() : null))
+                .channel(selectedFallbackChannel)
+                .recommendedAction(selectedFallbackAction)
+                .confidenceScore(snapshot != null ? snapshot.getConfidenceScore() : java.math.BigDecimal.valueOf(0.50))
+                .priority(snapshot != null ? snapshot.getPriority() : RecoveryPriority.MEDIUM)
+                .fallbackChannel(nextFallback)
+                .fallbackAction(nextFallbackAction)
+                .reason(String.format("Deterministic fallback to %s following execution failure on %s",
+                        selectedFallbackChannel, failedAttempt.getChannel()))
+                .build();
+
+        String metadataJson = String.format("{\"isFallback\":true,\"fallbackFromAttemptId\":\"%s\",\"previousChannel\":\"%s\"}",
+                failedAttempt.getId(), failedAttempt.getChannel());
+
+        RecoveryAttempt fallbackAttempt = RecoveryAttempt.builder()
+                .recoveryCase(recoveryCase)
+                .merchant(merchant)
+                .strategy(strategy)
+                .strategySnapshot(nextSnapshot.toJson())
+                .attemptNumber(nextAttemptNumber)
+                .channel(selectedFallbackChannel)
+                .status(RecoveryAttemptStatus.SCHEDULED)
+                .scheduledAt(now)
+                .metadata(metadataJson)
+                .build();
+
+        RecoveryAttempt savedAttempt = recoveryAttemptRepository.save(fallbackAttempt);
+        if (savedAttempt == null) {
+            savedAttempt = fallbackAttempt;
+        }
+        if (savedAttempt.getId() == null) {
+            savedAttempt.setId(UUID.randomUUID());
+        }
+        String newAttemptIdStr = savedAttempt.getId().toString();
+
+        // 9. Enqueue into durable execution queue
+        enqueueAttempt(savedAttempt, now);
+
+        // 10. Record audit event: RECOVERY_STRATEGY_FALLBACK_SELECTED
+        auditService.recordEvent(
+                merchant,
+                "RECOVERY_STRATEGY_FALLBACK_SELECTED",
+                ActorType.SYSTEM,
+                properties.getWorkerId(),
+                "RecoveryAttempt",
+                newAttemptIdStr,
+                "SELECT_FALLBACK",
+                String.format("Fallback channel %s (action: %s) selected for attempt #%d following failure on %s",
+                        selectedFallbackChannel, selectedFallbackAction, nextAttemptNumber, failedAttempt.getChannel()),
+                null
+        );
+
+        log.info("Scheduled and enqueued fallback attempt id={} (attempt #{}, channel={}) for case id={}",
+                newAttemptIdStr, nextAttemptNumber, selectedFallbackChannel, recoveryCase.getId());
+    }
+
+    private boolean isChannelViable(RecoveryChannel channel,
+                                    boolean hasPhone,
+                                    boolean hasEmail,
+                                    Map<RecoveryChannel, Integer> channelFailures,
+                                    int maxChannelFailures) {
+        if (channel == null) {
+            return false;
+        }
+        int failures = channelFailures.getOrDefault(channel, 0);
+        if (failures >= maxChannelFailures) {
+            return false;
+        }
+        return switch (channel) {
+            case WHATSAPP, SMS -> hasPhone;
+            case EMAIL -> hasEmail;
+            case SMART_LINK -> hasPhone || hasEmail;
+            case RETRY_CHARGE -> false;
+            case MANUAL -> true;
+        };
+    }
+
+    private RecoveryChannel computeNextFallbackInHierarchy(RecoveryChannel current) {
+        if (current == null) {
+            return null;
+        }
+        return switch (current) {
+            case WHATSAPP -> RecoveryChannel.EMAIL;
+            case EMAIL -> RecoveryChannel.SMS;
+            case SMS -> RecoveryChannel.SMART_LINK;
+            case SMART_LINK -> RecoveryChannel.MANUAL;
+            case RETRY_CHARGE -> RecoveryChannel.WHATSAPP;
+            case MANUAL -> null;
+        };
+    }
+
+    private String defaultActionForChannel(RecoveryChannel channel) {
+        if (channel == null) {
+            return "EXECUTE_RECOVERY";
+        }
+        return switch (channel) {
+            case WHATSAPP -> "SEND_WHATSAPP_REMINDER";
+            case EMAIL -> "SEND_EMAIL_REMINDER";
+            case SMS -> "SEND_SMS_REMINDER";
+            case SMART_LINK -> "SEND_PAYMENT_LINK";
+            case RETRY_CHARGE -> "RETRY_CHARGE_IMMEDIATE";
+            case MANUAL -> "MANUAL_ESCALATION";
+        };
     }
 
     public boolean isTransientError(String errorCode, String errorMessage, Exception ex) {

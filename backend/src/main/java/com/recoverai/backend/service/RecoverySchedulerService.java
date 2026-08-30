@@ -398,6 +398,10 @@ public class RecoverySchedulerService {
         };
     }
 
+    /**
+     * @deprecated Decommissioned in PR #17 in favor of durable {@link RecoveryExecutionQueueWorker}.
+     */
+    @Deprecated(since = "PR-17")
     public int pollAndExecuteDueAttempts() {
         Instant now = Instant.now();
         int batchSize = properties != null ? Math.max(1, properties.getBatchSize()) : 50;

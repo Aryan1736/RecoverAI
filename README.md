@@ -15,8 +15,10 @@ RecoverAI is an AI-powered revenue recovery system for failed payment transactio
 - **Validation**: Hibernate Validator (Spring Boot Starter Validation)
 
 ### Frontend
-- **Framework & Tooling**: React 19, Vite, TypeScript
-- **Styling & UI**: Tailwind CSS v4, Lucide Icons, Recharts (planned)
+- **Framework & Tooling**: React 19.2.x, Vite 8.2.x, TypeScript (Strict)
+- **Routing & State**: React Router v7 (`react-router-dom`), React Context
+- **Styling & UI**: Tailwind CSS v4 (`@tailwindcss/vite`), Lucide Icons, Custom B2B Design System
+- **Testing**: Vitest, React Testing Library, `@testing-library/jest-dom`, JSDOM
 
 ### AI & Integrations
 - **AI Model**: Google Gemini API (`gemini-3.7-flash`)
@@ -1878,12 +1880,139 @@ recoverai:
   - `DEGRADED`: Specific provider rate limits or high latency observed; review `messages` breakdown for failure classification (`RATE_LIMITED`, `TIMEOUT`).
   - Fallback channels automatically route retry links through resilient alternative communication paths.
 
+---
 
+## PR #20: Professional Merchant Frontend Foundation & Authentication
 
+RecoverAI PR #20 establishes a production-grade, highly polished B2B SaaS frontend architecture, comprehensive design system, client-side routing, secure JWT session management, and a complete merchant authentication experience built on React 19, Vite 8, and Tailwind CSS v4.
 
+### 1. Architecture & Design Principles
 
+The frontend was engineered to feel like a modern, enterprise-tier financial operations platform (similar to Stripe, Incident.io, and Linear):
+- **Deep Slate Visual Aesthetic**: Curated high-contrast slate/zinc palette (`#090d16` background, `#1e293b` borders, indigo brand accents `#6366f1` / `#4f46e5`, emerald success, amber warning, and rose error tones).
+- **Strict Information Hierarchy**: Clean 4px/8px grid scale, subtle borders, high-contrast typography (`Inter`), and interactive micro-interactions without distracting neon glows or oversized cards.
+- **Honest Data Architecture**: Zero fake metrics or placeholder numbers. Ingests real summary data from the backend (`GET /api/v1/dashboard/summary`), presenting an intentional empty state and webhook configuration guide when no cases exist yet.
 
+```
+frontend/src/
+├── api/
+│   ├── client.ts             # Centralized HTTP client (fetch, interceptors, 401 handler, base URL)
+│   ├── auth.ts               # Login, registration, and backend health check API calls
+│   └── dashboard.ts          # Dashboard overview metrics API call
+├── components/
+│   ├── layout/
+│   │   ├── AppShell.tsx      # Master dashboard shell with responsive sidebar & top navigation
+│   │   ├── Sidebar.tsx       # Collapsible navigation drawer with live engine status
+│   │   └── Header.tsx        # Top navigation with live backend health & merchant profile dropdown
+│   └── ui/
+│       ├── Alert.tsx         # Semantic alert banners (info, success, warning, error)
+│       ├── Avatar.tsx        # Dynamic initials avatar with status indicator
+│       ├── Badge.tsx         # Status pills with optional live pulse dots
+│       ├── Button.tsx        # Accessible button variants with built-in loading spinner
+│       ├── Card.tsx          # Composable card primitives (Header, Title, Content, Footer)
+│       ├── EmptyState.tsx    # Production empty state with icons and action buttons
+│       ├── ErrorState.tsx    # User-friendly error recovery container with retry action
+│       ├── Input.tsx         # Form control with labels, helper text, and accessible error states
+│       ├── PageHeader.tsx    # Standardized page title, description, and action bar
+│       ├── PasswordInput.tsx # Secure password input with show/hide eye toggle
+│       └── Skeleton.tsx      # Shimmer loading placeholders for cards and metrics
+├── context/
+│   ├── auth-context-def.ts   # Core AuthContext definition
+│   ├── AuthContext.tsx       # Authentication session provider & state lifecycle
+│   ├── toast-context-def.ts  # Core ToastContext definition
+│   └── ToastContext.tsx      # Non-blocking floating toast notifications provider
+├── hooks/
+│   ├── useAuth.ts            # Hook to access current merchant, token, and session actions
+│   └── useToast.ts           # Hook to trigger accessible notifications (success, error, info)
+├── pages/
+│   ├── auth/
+│   │   ├── LoginPage.tsx     # Merchant authentication screen with client validation
+│   │   └── RegisterPage.tsx  # Merchant onboarding form matching backend DTO
+│   ├── dashboard/
+│   │   └── OverviewPage.tsx  # Landing overview with real metrics, pipeline status, and webhook guide
+│   └── NotFoundPage.tsx      # 404 fallback page with navigation recovery
+├── routes/
+│   └── AppRoutes.tsx         # Centralized routing with ProtectedRoute and PublicRoute guards
+├── types/
+│   ├── api.ts                # ApiErrorResponse, ApiError class, and error sanitization helper
+│   ├── auth.ts               # Merchant, AuthResponse, LoginRequest, RegisterRequest DTOs
+│   └── dashboard.ts          # DashboardSummary response interface
+└── test/
+    ├── setup.ts              # Vitest test setup and DOM polyfills
+    ├── apiClient.test.ts     # Bearer header attachment, 401 expiry, and error parser tests
+    ├── auth.test.tsx         # Login, register, validation, and session expiry UI tests
+    ├── routing.test.tsx      # Route guards, authenticated redirects, and 404 tests
+    ├── components.test.tsx   # Reusable UI component unit tests
+    └── accessibility.test.tsx# Semantic labels, ARIA attributes, and keyboard tab navigation tests
+```
 
+---
 
+### 2. Client-Side Routing & Route Guards
 
+Using React Router v7 (`react-router-dom`), centralized routing enforces authentication boundaries:
+- **`ProtectedRoute`**: Blocks unauthenticated access to `/app`. Evaluates authenticated state and redirects unauthenticated users to `/login` with location memory.
+- **`PublicRoute`**: Prevents logged-in merchants from viewing `/login` or `/register`, immediately forwarding active sessions to `/app`.
+- **Root Redirection**: Root `/` automatically resolves to `/app`, seamlessly triggering the route guard.
+- **404 Fallback**: Catch-all `*` renders `NotFoundPage`, providing quick navigation back to the active dashboard or login.
 
+| Route | Guard | Component | Functionality |
+| :--- | :--- | :--- | :--- |
+| `/login` | `PublicRoute` | `LoginPage` | Merchant authentication with client validation, show/hide password toggle, and session expiry alert. |
+| `/register` | `PublicRoute` | `RegisterPage` | Merchant onboarding matching backend `MerchantRegisterRequestDto` with automatic login on 201 Created. |
+| `/app` | `ProtectedRoute` | `OverviewPage` inside `AppShell` | Overview landing page with real backend KPI metrics, pipeline state, and Razorpay webhook guide. |
+| `/` | Redirect | - | Forwards directly to `/app`. |
+| `*` | Catch-all | `NotFoundPage` | Accessible 404 error page with return action. |
+
+---
+
+### 3. Typed API Client & Security Architecture
+
+1. **Centralized HTTP Client (`src/api/client.ts`)**:
+   - Configures base URL from `VITE_API_BASE_URL` (defaulting to `http://localhost:8080`).
+   - Automatically attaches `Authorization: Bearer <token>` from local storage for authenticated endpoints.
+   - Sets standard `Content-Type: application/json` and `Accept: application/json` headers.
+2. **Deterministic 401 Session Expiry**:
+   - When an authenticated API endpoint returns `401 Unauthorized`, `apiClient` triggers an unauthenticated notification event.
+   - Clears `localStorage` keys (`recoverai_token`, `recoverai_merchant`) and resets authentication state.
+   - Redirects cleanly to `/login` with a safe "Your session has expired. Please sign in again." alert, without causing infinite reload loops.
+3. **Backend Error Normalization & Sanitization**:
+   - Parses Spring Boot `ApiErrorResponse` (`{ status, error, message, timestamp }`).
+   - Sanitizes errors through `getHumanReadableErrorMessage()`: raw Java stack traces, database details, or `NullPointerException` messages are never exposed to merchants.
+   - Network failure or server outage results in safe, professional error messages.
+4. **Multi-Tenant Security**:
+   - Backend remains authoritative. The merchant ID is verified by backend Spring Security filters from the authenticated JWT token.
+   - No sensitive secrets (`webhookSecret`, password hashes, provider credentials) are persisted in frontend storage or exposed in the UI.
+
+---
+
+### 4. Overview Landing Page Foundation (PR #20 -> PR #21 Bridge)
+
+PR #20 creates the clean Overview landing page upon which PR #21 (Full Analytics Dashboard & Case Management) will build:
+- **Header & Account Context**: Displays merchant name, `ACTIVE` status badge, and Razorpay account indicator.
+- **Live Autonomous Engine Banner**: Visualizes live AI recovery pipeline (Google Gemini 3.7 Flash engine + deterministic safety guardrails).
+- **KPI Summary Cards**: Real numbers fetched from `GET /api/v1/dashboard/summary`:
+  - Total Cases Ingested
+  - In-Flight / Open Cases
+  - Recovered Revenue (formatted in INR `₹`)
+  - Closed-Loop Recovery Rate (`%`)
+- **Intentional Empty State**: When no cases exist (`totalRecoveryCases === 0`), renders an honest empty state with a "Copy Webhook URL" quick action and instructions on connecting Razorpay webhook events (`payment.failed`, `payment.captured`), rather than displaying fake dummy data.
+- **Sidebar Future Modules**: Previews upcoming navigation items (`Recovery Cases`, `Analytics`, `Notifications`, `Settings`) with clean `PR #21` status badges without deploying fake mock functionality.
+
+---
+
+### 5. Automated Frontend Test Suite
+
+Comprehensive automated test coverage implemented using Vitest and React Testing Library in JSDOM:
+
+```bash
+cd frontend
+npm run test
+```
+
+Test coverage encompasses 5 suites and 39 tests:
+- **API Client & Storage (`apiClient.test.ts`)**: 7 tests verifying storage management, Bearer token attachment, `skipAuth` options, 400 error parsing, 401 session invalidation, and network disconnection handling.
+- **Authentication Flow (`auth.test.tsx`)**: 9 tests verifying login form rendering, client validation, successful authentication, bad credentials error banner, password visibility toggle, registration form rendering, password matching validation, automatic login after registration, and duplicate email conflict handling.
+- **Routing & Route Guards (`routing.test.tsx`)**: 6 tests verifying unauthenticated redirection, root redirection, authenticated access to `/app`, authenticated redirection away from `/login` and `/register`, and 404 route rendering.
+- **Design System UI (`components.test.tsx`)**: 14 tests verifying Button variants, loading spinner, Input validation states, PasswordInput toggle, Card composability, Badge indicators, Alert dismissal, Avatar initials, EmptyState, ErrorState, PageHeader, and Sidebar collapse functionality.
+- **Accessibility & Focus (`accessibility.test.tsx`)**: 3 tests verifying programmatic form labels, ARIA attributes, button roles, and complete keyboard tab navigation.

@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Zap, ShieldCheck, ArrowRight, Lock, Mail, Sparkles, CheckCircle2 } from 'lucide-react';
+import { Zap, ShieldCheck, ArrowRight, Sparkles, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useDemoMode } from '../../hooks/useDemoMode';
 import { useToast } from '../../hooks/useToast';
@@ -73,34 +73,34 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center py-12 sm:px-6 lg:px-8 relative selection:bg-indigo-500 selection:text-white">
-      {/* Background glow accents */}
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col justify-center py-12 sm:px-6 lg:px-8 relative selection:bg-emerald-500 selection:text-white">
+      {/* Subtle ambient light accents */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
-        <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-96 h-96 bg-indigo-600/15 rounded-full blur-3xl" />
-        <div className="absolute -bottom-40 right-1/4 w-80 h-80 bg-blue-600/10 rounded-full blur-3xl" />
+        <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-96 h-96 bg-emerald-100/40 rounded-full blur-3xl" />
+        <div className="absolute -bottom-40 right-1/4 w-80 h-80 bg-teal-100/30 rounded-full blur-3xl" />
       </div>
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10 px-4">
         {/* Brand Header */}
         <div className="flex flex-col items-center text-center mb-8 space-y-2">
-          <div className="inline-flex p-3 rounded-2xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 mb-1 shadow-inner">
+          <div className="inline-flex p-3 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-200 mb-1 shadow-2xs">
             <Zap className="w-7 h-7" />
           </div>
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-            <ShieldCheck className="w-3.5 h-3.5" />
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
             Track 3 • Razorpay Buildathon
           </span>
-          <h1 className="text-2xl font-bold tracking-tight text-white mt-1">
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 mt-1">
             Sign in to RecoverAI
           </h1>
-          <p className="text-xs text-slate-400 max-w-xs">
+          <p className="text-xs text-slate-500 max-w-xs">
             Autonomous, safe revenue recovery agent for failed payments
           </p>
         </div>
 
-        {/* Login Card */}
-        <div className="bg-slate-900/80 border border-slate-800 backdrop-blur-xl rounded-2xl p-6 sm:p-8 shadow-2xl space-y-5">
-          {sessionExpiredMessage && (
+        {/* Session Expired Banner */}
+        {sessionExpiredMessage && (
+          <div className="mb-4">
             <Alert
               type="warning"
               title="Session Expired"
@@ -109,45 +109,51 @@ export function LoginPage() {
             >
               {sessionExpiredMessage}
             </Alert>
-          )}
+          </div>
+        )}
 
-          {formError && (
-            <Alert type="error" title="Sign In Failed" dismissible onDismiss={() => setFormError(null)}>
+        {/* Global Form Error Banner */}
+        {formError && (
+          <div className="mb-4">
+            <Alert type="error" title="Sign In Failed">
               {formError}
             </Alert>
-          )}
+          </div>
+        )}
 
-          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+        {/* Main Sign-In Card */}
+        <div className="bg-white border border-slate-200/90 rounded-2xl p-6 sm:p-8 shadow-xs space-y-5">
+          <form onSubmit={handleSubmit} noValidate className="space-y-4">
             <Input
               label="Business Email"
+              id="login-email"
               type="email"
               placeholder="merchant@company.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              error={emailError || undefined}
-              leftIcon={<Mail className="w-4 h-4" />}
-              autoComplete="email"
+              error={emailError ?? undefined}
               required
+              autoComplete="email"
+              disabled={isSubmitting}
             />
 
-            <div className="space-y-1">
-              <PasswordInput
-                label="Password"
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                error={passwordError || undefined}
-                leftIcon={<Lock className="w-4 h-4" />}
-                autoComplete="current-password"
-                required
-              />
-            </div>
+            <PasswordInput
+              label="Password"
+              id="login-password"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              error={passwordError ?? undefined}
+              required
+              autoComplete="current-password"
+              disabled={isSubmitting}
+            />
 
             <Button
               type="submit"
               variant="primary"
-              size="md"
-              className="w-full mt-2 cursor-pointer"
+              size="lg"
+              className="w-full mt-2"
               isLoading={isSubmitting}
               rightIcon={<ArrowRight className="w-4 h-4" />}
             >
@@ -155,69 +161,59 @@ export function LoginPage() {
             </Button>
           </form>
 
-          <div className="pt-4 border-t border-slate-800 text-center text-xs text-slate-400">
-            Don't have a merchant account?{' '}
+          {/* Registration link */}
+          <div className="pt-2 text-center text-xs text-slate-500 border-t border-slate-100">
+            <span>Don&apos;t have an account? </span>
             <Link
               to="/register"
-              className="font-medium text-indigo-400 hover:text-indigo-300 hover:underline transition"
+              className="font-semibold text-emerald-600 hover:text-emerald-700 hover:underline focus:outline-none focus:underline"
             >
               Register your business
             </Link>
           </div>
         </div>
 
-        {/* Divider */}
-        <div className="relative my-6 text-center text-xs">
-          <div className="absolute inset-0 flex items-center" aria-hidden="true">
-            <div className="w-full border-t border-slate-800" />
-          </div>
-          <span className="relative bg-slate-950 px-3 text-slate-400 font-medium">
-            or explore without credentials
-          </span>
-        </div>
-
         {/* Interactive Demo Mode Card */}
-        <div className="bg-gradient-to-br from-indigo-950/70 via-slate-900/90 to-purple-950/50 border border-indigo-500/30 backdrop-blur-xl rounded-2xl p-5 sm:p-6 shadow-2xl space-y-4 relative overflow-hidden">
-          <div className="flex items-start justify-between gap-3">
-            <div className="space-y-1">
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                <Sparkles className="w-3 h-3 text-indigo-400" />
-                Interactive Sandbox
-              </div>
-              <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">
-                Try Interactive Demo
+        <div className="mt-4 p-5 rounded-2xl bg-amber-50/70 border border-amber-200/80 shadow-2xs space-y-3">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-xl bg-amber-100/80 text-amber-700 shrink-0 mt-0.5">
+              <Sparkles className="w-4 h-4 text-amber-600" />
+            </div>
+            <div className="space-y-0.5 text-left">
+              <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                Interactive Evaluator Demo
               </h2>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                Explore RecoverAI with a preloaded demo environment. Inspect simulated recovery cases, autonomous AI diagnosis, analytics, and recovery workflows without creating an account.
+              <p className="text-xs text-slate-600 leading-relaxed">
+                No account required • Explore with simulated demo data
               </p>
             </div>
           </div>
 
-          <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-t border-indigo-500/20">
-            <div className="flex items-center gap-1.5 text-[11px] text-indigo-200/90">
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span>No account required • Simulated demo data</span>
+          <div className="space-y-1.5 text-[11px] text-slate-500">
+            <div className="flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <span>Full merchant dashboard &amp; recovery telemetry</span>
             </div>
-
-            <Button
-              type="button"
-              variant="primary"
-              size="md"
-              className="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold shadow-lg shadow-indigo-600/30 shrink-0 cursor-pointer"
-              onClick={handleLaunchDemo}
-              rightIcon={<ArrowRight className="w-4 h-4" />}
-            >
-              Try Interactive Demo
-            </Button>
+            <div className="flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <span>Preloaded recovery cases with AI failure diagnosis</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <span>Interactive simulated customer recovery checkout</span>
+            </div>
           </div>
-        </div>
 
-        {/* Security & System footnote */}
-        <div className="text-center mt-6 text-xs text-slate-400 space-y-1">
-          <p className="flex items-center justify-center gap-1.5">
-            <Lock className="w-3 h-3" />
-            256-bit encrypted authentication & deterministic safety guardrails
-          </p>
+          <Button
+            type="button"
+            variant="secondary"
+            size="md"
+            onClick={handleLaunchDemo}
+            className="w-full bg-white hover:bg-amber-50/80 text-amber-900 border-amber-200/90 font-semibold cursor-pointer shadow-2xs"
+            leftIcon={<Sparkles className="w-4 h-4 text-amber-600" />}
+          >
+            Try Interactive Demo
+          </Button>
         </div>
       </div>
     </div>

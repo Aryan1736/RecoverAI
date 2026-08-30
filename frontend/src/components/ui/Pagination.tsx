@@ -45,18 +45,18 @@ export function Pagination({
   return (
     <nav
       aria-label="Pagination Navigation"
-      className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 py-3 text-xs text-slate-400 ${className}`}
+      className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 py-3 text-xs text-slate-500 ${className}`}
     >
       {totalElements !== undefined ? (
         <div>
-          Showing <span className="font-medium text-slate-200">{startRecord}</span> to{' '}
-          <span className="font-medium text-slate-200">{endRecord}</span> of{' '}
-          <span className="font-medium text-slate-200">{totalElements}</span> results
+          Showing <span className="font-medium text-slate-800">{startRecord}</span> to{' '}
+          <span className="font-medium text-slate-800">{endRecord}</span> of{' '}
+          <span className="font-medium text-slate-800">{totalElements}</span> results
         </div>
       ) : (
         <div>
-          Page <span className="font-medium text-slate-200">{page + 1}</span> of{' '}
-          <span className="font-medium text-slate-200">{totalPages}</span>
+          Page <span className="font-medium text-slate-800">{page + 1}</span> of{' '}
+          <span className="font-medium text-slate-800">{totalPages}</span>
         </div>
       )}
 
@@ -84,8 +84,8 @@ export function Pagination({
                 aria-label={`Page ${p + 1}`}
                 className={`min-w-8 h-8 px-2 rounded-lg text-xs font-medium transition cursor-pointer ${
                   isCurrent
-                    ? 'bg-indigo-600 text-white font-bold'
-                    : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                    ? 'bg-emerald-600 text-white font-bold'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
                 {p + 1}

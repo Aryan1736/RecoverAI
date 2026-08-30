@@ -18,9 +18,9 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
     return (
       <div className="w-full space-y-1.5 text-left">
         {label && (
-          <label htmlFor={inputId} className="block text-xs font-semibold uppercase tracking-wider text-slate-300">
+          <label htmlFor={inputId} className="block text-xs font-semibold uppercase tracking-wider text-slate-700">
             {label}
-            {props.required && <span className="text-rose-400 ml-1" aria-hidden="true">*</span>}
+            {props.required && <span className="text-rose-500 ml-1" aria-hidden="true">*</span>}
           </label>
         )}
 
@@ -37,10 +37,12 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             disabled={disabled}
             aria-invalid={Boolean(error)}
             aria-describedby={error ? errorId : helperText ? helperId : undefined}
-            className={`w-full rounded-lg bg-slate-900/90 text-slate-100 placeholder-slate-500 text-sm border transition duration-150 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed ${
+            className={`w-full rounded-lg bg-white text-slate-900 placeholder-slate-400 text-sm border shadow-2xs transition duration-150 focus:outline-none focus:ring-2 disabled:opacity-50 disabled:bg-slate-50 disabled:cursor-not-allowed ${
               leftIcon ? 'pl-10' : 'pl-3.5'
             } ${rightIcon ? 'pr-10' : 'pr-3.5'} py-2 ${
-              error ? 'border-rose-500/80 focus:ring-rose-500 focus:border-rose-500' : 'border-slate-800 hover:border-slate-700'
+              error
+                ? 'border-rose-300 focus:ring-rose-500/20 focus:border-rose-600 text-rose-900'
+                : 'border-slate-200 hover:border-slate-300 focus:ring-emerald-500/20 focus:border-emerald-600'
             } ${className}`}
             {...props}
           />
@@ -53,11 +55,11 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         </div>
 
         {error ? (
-          <p id={errorId} role="alert" className="text-xs font-medium text-rose-400">
+          <p id={errorId} role="alert" className="text-xs font-medium text-rose-600">
             {error}
           </p>
         ) : helperText ? (
-          <p id={helperId} className="text-xs text-slate-400">
+          <p id={helperId} className="text-xs text-slate-500">
             {helperText}
           </p>
         ) : null}

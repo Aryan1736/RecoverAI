@@ -8,6 +8,7 @@ import {
   RefreshCw,
   ArrowRight,
   User,
+  CreditCard,
 } from 'lucide-react';
 import { getRecoveryCases } from '../../api/recovery-cases';
 import { getDemoRecoveryCases } from '../../api/demo';
@@ -234,7 +235,7 @@ export function RecoveryCasesPage() {
       />
 
       {/* Filter Toolbar */}
-      <Card className="p-4 bg-slate-900/70 border-slate-800 space-y-3">
+      <Card className="p-4 bg-white border-slate-200 shadow-2xs space-y-3">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-3">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1">
             {/* Status Filter */}
@@ -269,7 +270,7 @@ export function RecoveryCasesPage() {
 
             {/* Failure Category Search */}
             <form onSubmit={handleCategorySearchSubmit} className="space-y-1.5 text-left">
-              <label htmlFor="category-search" className="block text-xs font-semibold uppercase tracking-wider text-slate-300">
+              <label htmlFor="category-search" className="block text-xs font-semibold uppercase tracking-wider text-slate-700">
                 Failure Category
               </label>
               <div className="relative flex items-center">
@@ -279,12 +280,12 @@ export function RecoveryCasesPage() {
                   placeholder="e.g. INSUFFICIENT_FUNDS"
                   value={categorySearch}
                   onChange={(e) => setCategorySearch(e.target.value)}
-                  className="w-full rounded-lg bg-slate-900 text-slate-100 placeholder-slate-500 text-sm border border-slate-800 pl-3.5 pr-8 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full rounded-lg bg-white text-slate-900 placeholder-slate-400 text-sm border border-slate-200 pl-3.5 pr-8 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 shadow-2xs"
                 />
                 <button
                   type="submit"
                   aria-label="Search failure category"
-                  className="absolute right-2 text-slate-400 hover:text-white p-1"
+                  className="absolute right-2 text-slate-400 hover:text-slate-700 p-1 cursor-pointer"
                 >
                   <Search className="w-3.5 h-3.5" />
                 </button>
@@ -299,7 +300,7 @@ export function RecoveryCasesPage() {
               size="sm"
               onClick={handleClearFilters}
               leftIcon={<X className="w-3.5 h-3.5" />}
-              className="text-slate-400 hover:text-white self-start md:self-end"
+              className="text-slate-500 hover:text-slate-900 self-start md:self-end"
             >
               Clear Filters
             </Button>
@@ -308,40 +309,40 @@ export function RecoveryCasesPage() {
 
         {/* Active Filter Indicators */}
         {hasActiveFilters && (
-          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800/80 text-xs text-slate-400">
-            <span className="flex items-center gap-1 font-medium text-slate-300">
-              <Filter className="w-3.5 h-3.5" />
+          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 text-xs text-slate-500">
+            <span className="flex items-center gap-1 font-medium text-slate-700">
+              <Filter className="w-3.5 h-3.5 text-slate-400" />
               Active filters:
             </span>
             {statusFilter !== 'ALL' && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-800 text-slate-200">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
                 Status: {statusFilter}
                 <button
                   type="button"
                   onClick={() => handleStatusChange('ALL')}
                   aria-label="Remove status filter"
-                  className="hover:text-rose-400 ml-1"
+                  className="hover:text-rose-600 ml-1 cursor-pointer font-bold"
                 >
                   ×
                 </button>
               </span>
             )}
             {priorityFilter !== 'ALL' && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-800 text-slate-200">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
                 Priority: {priorityFilter}
                 <button
                   type="button"
                   onClick={() => handlePriorityChange('ALL')}
                   aria-label="Remove priority filter"
-                  className="hover:text-rose-400 ml-1"
+                  className="hover:text-rose-600 ml-1 cursor-pointer font-bold"
                 >
                   ×
                 </button>
               </span>
             )}
             {categorySearch.trim() && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-800 text-slate-200">
-                Category: "{categorySearch.trim()}"
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
+                Category: &ldquo;{categorySearch.trim()}&rdquo;
                 <button
                   type="button"
                   onClick={() => {
@@ -349,7 +350,7 @@ export function RecoveryCasesPage() {
                     updateUrlParams(statusFilter, priorityFilter, '', page);
                   }}
                   aria-label="Remove category filter"
-                  className="hover:text-rose-400 ml-1"
+                  className="hover:text-rose-600 ml-1 cursor-pointer font-bold"
                 >
                   ×
                 </button>
@@ -359,13 +360,13 @@ export function RecoveryCasesPage() {
         )}
       </Card>
 
-      {/* Main Content Area */}
+      {/* Main Content Area: Cases Table */}
       {loading ? (
-        <Card>
+        <Card className="shadow-2xs">
           <CardContent className="p-0">
             <div className="p-6 space-y-4">
               {[1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="h-12 w-full bg-slate-900/60 rounded-lg animate-pulse" />
+                <div key={i} className="h-12 w-full bg-slate-100 rounded-lg animate-pulse" />
               ))}
             </div>
           </CardContent>
@@ -374,118 +375,119 @@ export function RecoveryCasesPage() {
         <ErrorState title="Failed to Load Cases" message={error} onRetry={handleRefresh} />
       ) : !data || data.content.length === 0 ? (
         <EmptyState
-          icon={<ShieldAlert className="w-8 h-8 text-indigo-400" />}
+          icon={<ShieldAlert className="w-8 h-8 text-emerald-600" />}
           title="No Recovery Cases Found"
           description={
             hasActiveFilters
-              ? 'No recovery cases match your active filters. Try adjusting or clearing the filters.'
-              : 'No failed payment recovery cases recorded in your merchant account yet.'
+              ? 'No recovery cases match the selected filters. Try clearing or broadening your search parameters.'
+              : 'There are currently no active or historical recovery cases in your queue.'
           }
           action={
             hasActiveFilters ? (
               <Button size="sm" variant="secondary" onClick={handleClearFilters}>
-                Clear Active Filters
+                Clear All Filters
               </Button>
             ) : undefined
           }
         />
       ) : (
-        <Card className="overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-slate-800 bg-slate-950/70 text-slate-400 uppercase tracking-wider font-semibold">
-                  <th className="py-3 px-4">Case ID / Ref</th>
-                  <th className="py-3 px-4">Customer</th>
-                  <th className="py-3 px-4">Recoverable Amount</th>
-                  <th className="py-3 px-4">Failure Category</th>
-                  <th className="py-3 px-4">Priority</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4">Created Date</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/60 text-slate-300">
-                {data.content.map((rc) => (
-                  <tr key={rc.id} className="hover:bg-slate-900/60 transition group">
-                    <td className="py-3 px-4">
-                      <Link
-                        to={`/recovery-cases/${rc.id}`}
-                        className="font-mono text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1.5"
-                        title={rc.id}
-                      >
-                        <span className="truncate max-w-[120px]">{rc.id.slice(0, 8)}...</span>
-                      </Link>
-                    </td>
-
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 shrink-0">
-                          <User className="w-3 h-3" />
-                        </div>
-                        <div className="truncate max-w-[150px]">
-                          <div className="font-medium text-slate-200 truncate">
-                            {rc.customerName || 'Anonymous Customer'}
-                          </div>
-                          <div className="text-[10px] text-slate-400 truncate">
-                            {rc.customerEmail || 'No email provided'}
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-
-                    <td className="py-3 px-4 font-mono font-semibold text-slate-200">
-                      <div>{formatCurrency(rc.estimatedRecoverableAmount, rc.currency)}</div>
-                      {rc.recoveredAmount > 0 && (
-                        <div className="text-[10px] text-emerald-400">
-                          Recovered: {formatCurrency(rc.recoveredAmount, rc.currency)}
-                        </div>
-                      )}
-                    </td>
-
-                    <td className="py-3 px-4">
-                      <span className="px-2 py-0.5 rounded-md bg-slate-950 border border-slate-800 font-mono text-[11px] text-slate-300">
-                        {rc.failureReasonCategory || 'Uncategorized'}
-                      </span>
-                    </td>
-
-                    <td className="py-3 px-4">{getPriorityBadge(rc.priority)}</td>
-
-                    <td className="py-3 px-4">{getStatusBadge(rc.status)}</td>
-
-                    <td className="py-3 px-4 font-mono text-slate-400 text-[11px]">
-                      {formatDateTime(rc.createdAt)}
-                    </td>
-
-                    <td className="py-3 px-4 text-right">
-                      <Link to={`/recovery-cases/${rc.id}`}>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-indigo-400 hover:text-white group-hover:bg-slate-800"
-                          rightIcon={<ArrowRight className="w-3.5 h-3.5" />}
-                        >
-                          View
-                        </Button>
-                      </Link>
-                    </td>
+        <div className="space-y-4">
+          <Card className="p-0 overflow-hidden shadow-2xs">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-slate-600 border-collapse">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 font-semibold uppercase tracking-wider text-[11px]">
+                  <tr>
+                    <th scope="col" className="py-3 px-4">Case ID</th>
+                    <th scope="col" className="py-3 px-4">Customer</th>
+                    <th scope="col" className="py-3 px-4">Payment</th>
+                    <th scope="col" className="py-3 px-4">Amount</th>
+                    <th scope="col" className="py-3 px-4">Priority</th>
+                    <th scope="col" className="py-3 px-4">Category</th>
+                    <th scope="col" className="py-3 px-4">Status</th>
+                    <th scope="col" className="py-3 px-4">Date</th>
+                    <th scope="col" className="py-3 px-4 text-right">Action</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {data.content.map((c) => (
+                    <tr
+                      key={c.id}
+                      className="hover:bg-slate-50/80 transition-colors group cursor-pointer"
+                    >
+                      <td className="py-3.5 px-4 font-mono font-medium text-slate-900 whitespace-nowrap">
+                        <Link
+                          to={`/recovery-cases/${encodeURIComponent(c.id)}`}
+                          className="hover:text-emerald-600 hover:underline"
+                        >
+                          {c.id.length > 16 ? `${c.id.slice(0, 16)}...` : c.id}
+                        </Link>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center text-[10px] shrink-0 font-semibold">
+                            <User className="w-3 h-3 text-slate-500" />
+                          </div>
+                          <div>
+                            <div className="truncate max-w-[120px] text-slate-900 font-medium">
+                              {c.customerName || 'Anonymous'}
+                            </div>
+                            {c.customerEmail && (
+                              <div className="text-[11px] text-slate-500 truncate max-w-[140px]">
+                                {c.customerEmail}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4 font-mono text-[11px] text-slate-500 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          <CreditCard className="w-3 h-3 text-slate-400 shrink-0" />
+                          <span>{c.paymentId ? c.paymentId.slice(0, 14) : '—'}</span>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4 font-mono font-semibold text-slate-900 whitespace-nowrap">
+                        {formatCurrency(c.estimatedRecoverableAmount, c.currency)}
+                      </td>
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        {getPriorityBadge(c.priority)}
+                      </td>
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        <span className="text-[11px] font-mono text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                          {c.failureReasonCategory || 'UNKNOWN'}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        {getStatusBadge(c.status)}
+                      </td>
+                      <td className="py-3.5 px-4 whitespace-nowrap text-slate-500">
+                        {formatDateTime(c.createdAt)}
+                      </td>
+                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                        <Link
+                          to={`/recovery-cases/${encodeURIComponent(c.id)}`}
+                          className="inline-flex items-center"
+                        >
+                          <Button size="sm" variant="outline" rightIcon={<ArrowRight className="w-3.5 h-3.5" />}>
+                            View
+                          </Button>
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
 
-          {/* Pagination Controls */}
-          <div className="p-4 border-t border-slate-800 bg-slate-950/40">
-            <Pagination
-              page={data.number}
-              totalPages={data.totalPages}
-              totalElements={data.totalElements}
-              size={data.size}
-              onPageChange={handlePageChange}
-            />
-          </div>
-        </Card>
+          {/* Pagination */}
+          <Pagination
+            page={data.number}
+            totalPages={data.totalPages}
+            totalElements={data.totalElements}
+            size={data.size}
+            onPageChange={handlePageChange}
+          />
+        </div>
       )}
     </div>
   );

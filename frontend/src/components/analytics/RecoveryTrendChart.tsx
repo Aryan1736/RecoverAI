@@ -45,11 +45,11 @@ export function RecoveryTrendChart({
     return (
       <Card>
         <CardHeader>
-          <div className="h-5 w-48 bg-slate-800 rounded animate-pulse" />
-          <div className="h-3 w-64 bg-slate-800/60 rounded animate-pulse mt-1" />
+          <div className="h-5 w-48 bg-slate-100 rounded animate-pulse" />
+          <div className="h-3 w-64 bg-slate-100 rounded animate-pulse mt-1" />
         </CardHeader>
         <CardContent>
-          <div className="h-64 w-full bg-slate-900/60 rounded-xl animate-pulse flex items-center justify-center text-slate-600 text-xs">
+          <div className="h-64 w-full bg-slate-50 rounded-xl animate-pulse flex items-center justify-center text-slate-400 text-xs">
             Loading recovery trends...
           </div>
         </CardContent>
@@ -66,7 +66,7 @@ export function RecoveryTrendChart({
         </CardHeader>
         <CardContent>
           <EmptyState
-            icon={<TrendingUp className="w-8 h-8 text-indigo-400" />}
+            icon={<TrendingUp className="w-8 h-8 text-emerald-600" />}
             title="No Trend Data Available"
             description="There are no recovery cases recorded within this date range to plot trends."
           />
@@ -139,31 +139,31 @@ export function RecoveryTrendChart({
   const hoveredTrend = hoveredIndex !== null ? trends[hoveredIndex] : null;
 
   return (
-    <Card className="overflow-hidden">
+    <Card className="overflow-hidden shadow-2xs">
       <CardHeader>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
             <CardTitle>Recovery Performance Trends</CardTitle>
             <CardDescription>
               Overall recovery rate:{' '}
-              <span className="font-semibold text-emerald-400 font-mono">
+              <span className="font-semibold text-emerald-700 font-mono">
                 {overallRecoveryRate ? `${Number(overallRecoveryRate).toFixed(1)}%` : '0.0%'}
               </span>{' '}
-              • Total recovered: <span className="font-mono text-slate-200">{formatCurrency(totalRecoveredAmount)}</span> of{' '}
-              <span className="font-mono text-slate-400">{formatCurrency(totalAmountAtRisk)}</span> at risk
+              • Total recovered: <span className="font-mono font-medium text-slate-800">{formatCurrency(totalRecoveredAmount)}</span> of{' '}
+              <span className="font-mono text-slate-500">{formatCurrency(totalAmountAtRisk)}</span> at risk
             </CardDescription>
           </div>
 
           <div className="flex items-center gap-2">
             {/* Metric Toggle */}
-            <div className="flex items-center p-1 bg-slate-950 rounded-lg border border-slate-800 text-xs">
+            <div className="flex items-center p-1 bg-slate-100 rounded-lg border border-slate-200 text-xs">
               <button
                 type="button"
                 onClick={() => setActiveMetric('amount')}
                 className={`px-2.5 py-1 rounded-md font-medium transition cursor-pointer ${
                   activeMetric === 'amount'
-                    ? 'bg-indigo-600 text-white font-semibold'
-                    : 'text-slate-400 hover:text-slate-200'
+                    ? 'bg-white text-slate-900 font-semibold shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
                 Revenue (INR)
@@ -173,8 +173,8 @@ export function RecoveryTrendChart({
                 onClick={() => setActiveMetric('cases')}
                 className={`px-2.5 py-1 rounded-md font-medium transition cursor-pointer ${
                   activeMetric === 'cases'
-                    ? 'bg-indigo-600 text-white font-semibold'
-                    : 'text-slate-400 hover:text-slate-200'
+                    ? 'bg-white text-slate-900 font-semibold shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
                 Cases Volume
@@ -197,15 +197,15 @@ export function RecoveryTrendChart({
 
       <CardContent>
         {/* Legend */}
-        <div className="flex flex-wrap items-center gap-5 text-xs text-slate-400 mb-3 pb-2 border-b border-slate-800/60">
+        <div className="flex flex-wrap items-center gap-5 text-xs text-slate-600 mb-3 pb-2 border-b border-slate-100">
           <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-xs bg-emerald-500" />
-            <span>
+            <span className="w-3 h-3 rounded-xs bg-emerald-600" />
+            <span className="font-medium">
               {activeMetric === 'amount' ? 'Amount Recovered' : 'Cases Recovered'}
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="w-3 h-0.5 border-t-2 border-dashed border-indigo-400 inline-block" />
+            <span className="w-3 h-0.5 border-t-2 border-dashed border-slate-400 inline-block" />
             <span>
               {activeMetric === 'amount' ? 'Amount at Risk' : 'Cases Ingested'}
             </span>
@@ -221,23 +221,23 @@ export function RecoveryTrendChart({
           <div className="overflow-x-auto max-h-72">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="border-b border-slate-800 text-slate-400 uppercase tracking-wider font-semibold">
-                  <th className="py-2 px-3">Date</th>
-                  <th className="py-2 px-3 text-right">Cases Ingested</th>
-                  <th className="py-2 px-3 text-right">Cases Recovered</th>
-                  <th className="py-2 px-3 text-right">Amount at Risk</th>
-                  <th className="py-2 px-3 text-right">Amount Recovered</th>
-                  <th className="py-2 px-3 text-right">Recovery Rate</th>
+                <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 uppercase tracking-wider font-semibold">
+                  <th className="py-2.5 px-3">Date</th>
+                  <th className="py-2.5 px-3 text-right">Cases Ingested</th>
+                  <th className="py-2.5 px-3 text-right">Cases Recovered</th>
+                  <th className="py-2.5 px-3 text-right">Amount at Risk</th>
+                  <th className="py-2.5 px-3 text-right">Amount Recovered</th>
+                  <th className="py-2.5 px-3 text-right">Recovery Rate</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60 text-slate-300 font-mono">
+              <tbody className="divide-y divide-slate-100 text-slate-700 font-mono">
                 {trends.map((t) => (
-                  <tr key={t.date} className="hover:bg-slate-900/50">
-                    <td className="py-2 px-3 font-sans text-slate-200">{formatShortDate(t.date)}</td>
+                  <tr key={t.date} className="hover:bg-slate-50/80">
+                    <td className="py-2 px-3 font-sans text-slate-900 font-medium">{formatShortDate(t.date)}</td>
                     <td className="py-2 px-3 text-right">{t.recoveryCasesCreated}</td>
-                    <td className="py-2 px-3 text-right text-emerald-400">{t.recoveredCaseCount}</td>
+                    <td className="py-2 px-3 text-right text-emerald-700 font-semibold">{t.recoveredCaseCount}</td>
                     <td className="py-2 px-3 text-right">{formatCurrency(Number(t.amountAtRisk || 0))}</td>
-                    <td className="py-2 px-3 text-right text-emerald-400">
+                    <td className="py-2 px-3 text-right text-emerald-700 font-semibold">
                       {formatCurrency(Number(t.amountRecovered || 0))}
                     </td>
                     <td className="py-2 px-3 text-right">
@@ -259,8 +259,8 @@ export function RecoveryTrendChart({
             >
               <defs>
                 <linearGradient id="recoveredGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#10b981" stopOpacity="0.28" />
-                  <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
+                  <stop offset="0%" stopColor="#059669" stopOpacity="0.16" />
+                  <stop offset="100%" stopColor="#059669" stopOpacity="0.0" />
                 </linearGradient>
               </defs>
 
@@ -275,15 +275,14 @@ export function RecoveryTrendChart({
                       y1={yVal}
                       x2={width - paddingRight}
                       y2={yVal}
-                      stroke="#334155"
+                      stroke="#e2e8f0"
                       strokeDasharray="3 3"
-                      strokeOpacity="0.4"
                     />
                     <text
                       x={paddingLeft - 8}
                       y={yVal + 3}
                       textAnchor="end"
-                      className="text-[10px] fill-slate-300 font-mono"
+                      className="text-[10px] fill-slate-400 font-mono"
                     >
                       {activeMetric === 'amount'
                         ? labelVal >= 1000
@@ -301,7 +300,7 @@ export function RecoveryTrendChart({
                 y1={paddingTop + chartHeight}
                 x2={width - paddingRight}
                 y2={paddingTop + chartHeight}
-                stroke="#475569"
+                stroke="#cbd5e1"
                 strokeWidth="1"
               />
 
@@ -310,14 +309,14 @@ export function RecoveryTrendChart({
               <path
                 d={atRiskLinePath}
                 fill="none"
-                stroke="#818cf8"
+                stroke="#94a3b8"
                 strokeWidth="2"
                 strokeDasharray="4 4"
               />
               <path
                 d={recoveredLinePath}
                 fill="none"
-                stroke="#10b981"
+                stroke="#059669"
                 strokeWidth="2.5"
               />
 
@@ -338,7 +337,7 @@ export function RecoveryTrendChart({
                         y1={paddingTop}
                         x2={cx}
                         y2={paddingTop + chartHeight}
-                        stroke="#64748b"
+                        stroke="#94a3b8"
                         strokeWidth="1.5"
                         strokeDasharray="2 2"
                       />
@@ -349,8 +348,8 @@ export function RecoveryTrendChart({
                       cx={cx}
                       cy={cyRecovered}
                       r={isHovered ? 5.5 : 3.5}
-                      fill="#10b981"
-                      stroke="#0f172a"
+                      fill="#059669"
+                      stroke="#ffffff"
                       strokeWidth="2"
                       className="transition-all duration-150"
                     />
@@ -387,7 +386,7 @@ export function RecoveryTrendChart({
                     x={cx}
                     y={paddingTop + chartHeight + 20}
                     textAnchor="middle"
-                    className="text-[10px] fill-slate-300 font-sans"
+                    className="text-[10px] fill-slate-500 font-sans"
                   >
                     {formatShortDate(t.date)}
                   </text>
@@ -398,30 +397,30 @@ export function RecoveryTrendChart({
             {/* Hover Tooltip Overlay */}
             {hoveredTrend && hoveredIndex !== null && (
               <div
-                className="absolute z-20 pointer-events-none transform -translate-x-1/2 bottom-12 p-2.5 rounded-xl bg-slate-950 border border-slate-700 shadow-xl text-xs space-y-1"
+                className="absolute z-20 pointer-events-none transform -translate-x-1/2 bottom-12 p-2.5 rounded-xl bg-white border border-slate-200 shadow-xl text-xs space-y-1"
                 style={{
                   left: `${(getX(hoveredIndex) / width) * 100}%`,
                 }}
               >
-                <div className="font-semibold text-white border-b border-slate-800 pb-1">
+                <div className="font-semibold text-slate-900 border-b border-slate-100 pb-1">
                   {formatShortDate(hoveredTrend.date)}
                 </div>
                 <div className="text-[11px] space-y-0.5">
-                  <div className="flex items-center justify-between gap-4 text-emerald-400">
+                  <div className="flex items-center justify-between gap-4 text-emerald-700 font-medium">
                     <span>Recovered:</span>
-                    <span className="font-mono font-semibold">
+                    <span className="font-mono font-bold">
                       {formatCurrency(Number(hoveredTrend.amountRecovered || 0))} ({hoveredTrend.recoveredCaseCount} cases)
                     </span>
                   </div>
-                  <div className="flex items-center justify-between gap-4 text-indigo-300">
+                  <div className="flex items-center justify-between gap-4 text-slate-700">
                     <span>At Risk:</span>
-                    <span className="font-mono font-semibold">
+                    <span className="font-mono font-medium">
                       {formatCurrency(Number(hoveredTrend.amountAtRisk || 0))} ({hoveredTrend.recoveryCasesCreated} cases)
                     </span>
                   </div>
-                  <div className="flex items-center justify-between gap-4 text-slate-400">
+                  <div className="flex items-center justify-between gap-4 text-slate-500">
                     <span>Rate:</span>
-                    <span className="font-mono font-semibold text-slate-200">
+                    <span className="font-mono font-bold text-slate-900">
                       {hoveredTrend.recoveryRate ? `${Number(hoveredTrend.recoveryRate).toFixed(1)}%` : '0.0%'}
                     </span>
                   </div>

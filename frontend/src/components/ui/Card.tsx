@@ -7,7 +7,7 @@ export function Card({
 }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={`bg-slate-900/80 border border-slate-800/90 rounded-xl p-5 sm:p-6 shadow-sm transition-all duration-150 ${className}`}
+      className={`bg-white border border-slate-200/90 rounded-xl p-5 sm:p-6 shadow-xs transition-all duration-150 ${className}`}
       {...props}
     >
       {children}
@@ -21,7 +21,7 @@ export function CardHeader({
   ...props
 }: HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={`space-y-1.5 pb-4 border-b border-slate-800/60 ${className}`} {...props}>
+    <div className={`space-y-1.5 pb-4 border-b border-slate-100 ${className}`} {...props}>
       {children}
     </div>
   );
@@ -34,7 +34,7 @@ export function CardTitle({
 }: HTMLAttributes<HTMLHeadingElement>) {
   return (
     <h3
-      className={`text-base font-semibold tracking-tight text-white ${className}`}
+      className={`text-base font-semibold tracking-tight text-slate-900 ${className}`}
       {...props}
     >
       {children}
@@ -48,7 +48,7 @@ export function CardDescription({
   ...props
 }: HTMLAttributes<HTMLParagraphElement>) {
   return (
-    <p className={`text-xs text-slate-400 leading-relaxed ${className}`} {...props}>
+    <p className={`text-xs text-slate-500 leading-relaxed ${className}`} {...props}>
       {children}
     </p>
   );
@@ -73,7 +73,7 @@ export function CardFooter({
 }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={`mt-4 pt-4 border-t border-slate-800/60 flex items-center justify-between gap-3 ${className}`}
+      className={`mt-4 pt-4 border-t border-slate-100 flex items-center justify-between gap-3 ${className}`}
       {...props}
     >
       {children}

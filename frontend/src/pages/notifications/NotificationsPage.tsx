@@ -1,20 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import {
-  CheckCheck,
-  RefreshCw,
-  Filter,
-  Inbox,
-} from 'lucide-react';
-import { PageHeader } from '../../components/ui/PageHeader';
-import { Button } from '../../components/ui/Button';
-import { Select } from '../../components/ui/Select';
-import { Pagination } from '../../components/ui/Pagination';
-import { Skeleton } from '../../components/ui/Skeleton';
-import { EmptyState } from '../../components/ui/EmptyState';
-import { ErrorState } from '../../components/ui/ErrorState';
-import { NotificationItem } from '../../components/notifications/NotificationItem';
-import { NotificationDetailModal } from '../../components/notifications/NotificationDetailModal';
-import { useToast } from '../../hooks/useToast';
+import { RefreshCw, CheckCheck, Filter, Inbox } from 'lucide-react';
 import {
   getNotifications,
   markAsRead,
@@ -30,8 +15,18 @@ import type {
   NotificationResponseDto,
   MerchantNotificationEvent,
 } from '../../types/notifications';
+import { PageHeader } from '../../components/ui/PageHeader';
+import { Button } from '../../components/ui/Button';
+import { Select } from '../../components/ui/Select';
+import { Pagination } from '../../components/ui/Pagination';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { ErrorState } from '../../components/ui/ErrorState';
+import { Skeleton } from '../../components/ui/Skeleton';
+import { NotificationItem } from '../../components/notifications/NotificationItem';
+import { NotificationDetailModal } from '../../components/notifications/NotificationDetailModal';
+import { useToast } from '../../hooks/useToast';
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 15;
 
 export function NotificationsPage() {
   const { isDemoMode } = useDemoMode();
@@ -42,20 +37,16 @@ export function NotificationsPage() {
   const [totalPages, setTotalPages] = useState<number>(1);
   const [currentPage, setCurrentPage] = useState<number>(0);
 
-  // Filters
   const [unreadOnly, setUnreadOnly] = useState<boolean>(false);
   const [selectedEvent, setSelectedEvent] = useState<string>('ALL');
 
-  // Loading and error states
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Action states
-  const [isMarkingAll, setIsMarkingAll] = useState<boolean>(false);
+  const [selectedNotification, setSelectedNotification] =
+    useState<NotificationResponseDto | null>(null);
   const [markingId, setMarkingId] = useState<string | null>(null);
-
-  // Detail Modal State
-  const [selectedNotification, setSelectedNotification] = useState<NotificationResponseDto | null>(null);
+  const [isMarkingAll, setIsMarkingAll] = useState<boolean>(false);
 
   const fetchNotifications = useCallback(async () => {
     setIsLoading(true);
@@ -226,7 +217,7 @@ export function NotificationsPage() {
       />
 
       {/* Filter and Control Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-slate-900/60 border border-slate-800/80">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-white border border-slate-200 shadow-2xs">
         <div className="flex flex-wrap items-center gap-3">
           {/* Event Filter Select */}
           <div className="w-48 sm:w-56">
@@ -256,8 +247,8 @@ export function NotificationsPage() {
             }}
             className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold border transition cursor-pointer ${
               unreadOnly
-                ? 'bg-indigo-600/20 text-indigo-300 border-indigo-500/50 shadow-sm'
-                : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200 hover:border-slate-700'
+                ? 'bg-emerald-50 text-emerald-800 border-emerald-300 shadow-2xs'
+                : 'bg-white text-slate-600 border-slate-200 hover:text-slate-900 hover:bg-slate-50'
             }`}
             aria-pressed={unreadOnly}
           >
@@ -267,11 +258,11 @@ export function NotificationsPage() {
         </div>
 
         {/* Results summary */}
-        <div className="text-xs text-slate-400">
+        <div className="text-xs text-slate-500">
           {!isLoading && (
             <span>
-              Showing <span className="font-semibold text-slate-200">{notifications.length}</span> of{' '}
-              <span className="font-semibold text-slate-200">{totalElements}</span> notifications
+              Showing <span className="font-semibold text-slate-800">{notifications.length}</span> of{' '}
+              <span className="font-semibold text-slate-800">{totalElements}</span> notifications
             </span>
           )}
         </div>
@@ -283,7 +274,7 @@ export function NotificationsPage() {
           {Array.from({ length: 5 }).map((_, i) => (
             <div
               key={i}
-              className="p-4 sm:p-5 rounded-xl border border-slate-800 bg-slate-950/60 space-y-2.5"
+              className="p-4 sm:p-5 rounded-xl border border-slate-200 bg-white space-y-2.5 shadow-2xs"
             >
               <div className="flex items-center gap-2">
                 <Skeleton className="h-5 w-28 rounded-full" />
@@ -302,7 +293,7 @@ export function NotificationsPage() {
         />
       ) : notifications.length === 0 ? (
         <EmptyState
-          icon={<Inbox className="w-8 h-8 text-slate-500" />}
+          icon={<Inbox className="w-8 h-8 text-slate-400" />}
           title="No Notifications Found"
           description={
             unreadOnly || selectedEvent !== 'ALL'
@@ -341,7 +332,7 @@ export function NotificationsPage() {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="pt-4 border-t border-slate-800">
+            <div className="pt-4 border-t border-slate-200">
               <Pagination
                 page={currentPage}
                 totalPages={totalPages}

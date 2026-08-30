@@ -107,9 +107,9 @@ export function DateRangeSelector({
   return (
     <div className="space-y-3">
       {/* Preset Pill Buttons */}
-      <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-900/90 rounded-xl border border-slate-800 text-xs">
-        <div className="flex items-center gap-1.5 px-2.5 py-1 text-slate-400 font-medium">
-          <Calendar className="w-3.5 h-3.5 text-indigo-400" />
+      <div className="flex flex-wrap items-center gap-1.5 p-1 bg-white rounded-xl border border-slate-200 text-xs shadow-2xs">
+        <div className="flex items-center gap-1.5 px-2.5 py-1 text-slate-500 font-medium">
+          <Calendar className="w-3.5 h-3.5 text-emerald-600" />
           <span className="hidden sm:inline">Range:</span>
         </div>
 
@@ -123,8 +123,8 @@ export function DateRangeSelector({
               onClick={() => handleSelectPreset(preset.id)}
               className={`px-3 py-1.5 rounded-lg font-medium transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
                 isActive
-                  ? 'bg-indigo-600 text-white shadow-xs font-semibold'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/80'
+                  ? 'bg-emerald-600 text-white shadow-2xs font-semibold'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
             >
               {preset.label}
@@ -137,10 +137,10 @@ export function DateRangeSelector({
       {showCustom && (
         <form
           onSubmit={handleApplyCustom}
-          className="p-3.5 bg-slate-900/60 rounded-xl border border-slate-800 flex flex-col sm:flex-row items-start sm:items-end gap-3 text-xs"
+          className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-start sm:items-end gap-3 text-xs"
         >
           <div className="space-y-1">
-            <label htmlFor={fromId} className="block text-[11px] font-semibold text-slate-300 uppercase">
+            <label htmlFor={fromId} className="block text-[11px] font-semibold text-slate-700 uppercase">
               From Date
             </label>
             <input
@@ -149,12 +149,12 @@ export function DateRangeSelector({
               value={customFrom}
               disabled={disabled}
               onChange={(e) => setCustomFrom(e.target.value)}
-              className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 shadow-2xs"
             />
           </div>
 
           <div className="space-y-1">
-            <label htmlFor={toId} className="block text-[11px] font-semibold text-slate-300 uppercase">
+            <label htmlFor={toId} className="block text-[11px] font-semibold text-slate-700 uppercase">
               To Date
             </label>
             <input
@@ -163,7 +163,7 @@ export function DateRangeSelector({
               value={customTo}
               disabled={disabled}
               onChange={(e) => setCustomTo(e.target.value)}
-              className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 shadow-2xs"
             />
           </div>
 
@@ -172,7 +172,7 @@ export function DateRangeSelector({
           </Button>
 
           {customError && (
-            <div className="flex items-center gap-1.5 text-rose-400 text-xs self-center">
+            <div className="flex items-center gap-1.5 text-rose-600 text-xs self-center">
               <AlertCircle className="w-4 h-4 shrink-0" />
               <span>{customError}</span>
             </div>

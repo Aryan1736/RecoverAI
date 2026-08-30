@@ -113,7 +113,7 @@ export function Modal({
     >
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-slate-950/80 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
+        className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity"
         onClick={onClose}
         aria-hidden="true"
       />
@@ -122,16 +122,16 @@ export function Modal({
       <div
         ref={modalRef}
         tabIndex={-1}
-        className={`relative w-full ${sizeClasses[size]} bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl z-10 animate-in zoom-in-95 duration-200 focus:outline-none ${className}`}
+        className={`relative w-full ${sizeClasses[size]} bg-white border border-slate-200 rounded-2xl shadow-xl z-10 focus:outline-none ${className}`}
       >
         {/* Header */}
-        <div className="flex items-start justify-between p-5 border-b border-slate-800">
+        <div className="flex items-start justify-between p-5 border-b border-slate-100">
           <div>
-            <h3 id={titleId} className="text-base font-semibold text-white">
+            <h3 id={titleId} className="text-base font-semibold text-slate-900">
               {title}
             </h3>
             {description && (
-              <p id={descId} className="text-xs text-slate-400 mt-1">
+              <p id={descId} className="text-xs text-slate-500 mt-1">
                 {description}
               </p>
             )}
@@ -139,7 +139,7 @@ export function Modal({
           <button
             type="button"
             onClick={onClose}
-            className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition cursor-pointer"
+            className="text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-100 transition cursor-pointer"
             aria-label="Close dialog"
           >
             <X className="w-4 h-4" />
@@ -147,11 +147,11 @@ export function Modal({
         </div>
 
         {/* Body */}
-        <div className="p-5 text-sm text-slate-300">{children}</div>
+        <div className="p-5 text-sm text-slate-600">{children}</div>
 
         {/* Footer */}
         {footer && (
-          <div className="flex items-center justify-end gap-3 p-4 bg-slate-950/50 border-t border-slate-800 rounded-b-2xl">
+          <div className="flex items-center justify-end gap-3 p-4 bg-slate-50 border-t border-slate-100 rounded-b-2xl">
             {footer}
           </div>
         )}

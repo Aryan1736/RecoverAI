@@ -7,13 +7,13 @@ export function NotFoundPage() {
   const { isAuthenticated } = useAuth();
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-6 text-center">
-      <div className="p-4 rounded-2xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 mb-4">
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col items-center justify-center p-6 text-center selection:bg-emerald-500 selection:text-white">
+      <div className="p-4 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-200 mb-4 shadow-2xs">
         <ShieldAlert className="w-10 h-10" />
       </div>
-      <h1 className="text-4xl font-extrabold tracking-tight text-white mb-2">404</h1>
-      <h2 className="text-lg font-semibold text-slate-200 mb-2">Page Not Found</h2>
-      <p className="text-xs text-slate-400 max-w-sm mb-6">
+      <h1 className="text-4xl font-extrabold tracking-tight text-slate-900 mb-2">404</h1>
+      <h2 className="text-lg font-semibold text-slate-800 mb-2">Page Not Found</h2>
+      <p className="text-xs text-slate-500 max-w-sm mb-6">
         The route you are looking for does not exist or has been relocated within the RecoverAI platform.
       </p>
       <Link to={isAuthenticated ? '/app' : '/login'}>

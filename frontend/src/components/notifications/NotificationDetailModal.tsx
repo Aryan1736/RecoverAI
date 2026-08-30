@@ -113,7 +113,7 @@ export function NotificationDetailModal({
     >
       <div className="space-y-6">
         {/* Header Metadata Ribbon */}
-        <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-950 border border-slate-800">
+        <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200">
           <div className="flex items-center gap-2.5">
             <Badge variant={eventConfig.variant}>
               {eventConfig.label}
@@ -123,18 +123,18 @@ export function NotificationDetailModal({
             </Badge>
           </div>
 
-          <div className="flex items-center gap-1.5 text-xs text-slate-400 font-mono">
-            <Clock className="w-3.5 h-3.5 text-slate-500" />
+          <div className="flex items-center gap-1.5 text-xs text-slate-500 font-mono">
+            <Clock className="w-3.5 h-3.5 text-slate-400" />
             <span>{formatFullDate(notification.createdAt)}</span>
           </div>
         </div>
 
         {/* Message Body */}
         <div className="space-y-2">
-          <label className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+          <label className="text-xs font-semibold uppercase tracking-wider text-slate-700">
             Notification Content
           </label>
-          <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800/80 text-sm text-slate-200 leading-relaxed whitespace-pre-wrap font-sans">
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-sm text-slate-800 leading-relaxed whitespace-pre-wrap font-sans">
             {notification.message}
           </div>
         </div>
@@ -142,17 +142,17 @@ export function NotificationDetailModal({
         {/* Linked Recovery Case */}
         {notification.recoveryCaseId && (
           <div className="space-y-2">
-            <label className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+            <label className="text-xs font-semibold uppercase tracking-wider text-slate-700">
               Associated Recovery Case
             </label>
-            <div className="flex items-center justify-between p-3 rounded-xl bg-slate-950/40 border border-slate-800">
-              <span className="font-mono text-xs text-slate-300">
+            <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200">
+              <span className="font-mono text-xs text-slate-800 font-semibold">
                 Case ID: {notification.recoveryCaseId}
               </span>
               <Link
                 to={`/recovery-cases/${notification.recoveryCaseId}`}
                 onClick={onClose}
-                className="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-400 hover:text-indigo-300 hover:underline"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600 hover:text-emerald-700 hover:underline"
               >
                 View Case Details
                 <ExternalLink className="w-3.5 h-3.5" />
@@ -163,13 +163,13 @@ export function NotificationDetailModal({
 
         {/* Deliveries Breakdown */}
         <div className="space-y-2">
-          <label className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-            <Send className="w-3.5 h-3.5 text-indigo-400" />
+          <label className="text-xs font-semibold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+            <Send className="w-3.5 h-3.5 text-emerald-600" />
             Channel Deliveries ({notification.deliveries.length})
           </label>
 
           {notification.deliveries.length === 0 ? (
-            <p className="text-xs text-slate-500 italic p-3 bg-slate-950 rounded-lg border border-slate-800">
+            <p className="text-xs text-slate-500 italic p-3 bg-slate-50 rounded-lg border border-slate-200">
               No delivery records available.
             </p>
           ) : (
@@ -177,16 +177,16 @@ export function NotificationDetailModal({
               {notification.deliveries.map((delivery) => (
                 <div
                   key={delivery.id}
-                  className="p-3 rounded-xl bg-slate-950 border border-slate-800/90 text-xs space-y-2"
+                  className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-2"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <span className="font-semibold text-slate-200 font-mono">
+                      <span className="font-semibold text-slate-900 font-mono">
                         {delivery.channel}
                       </span>
-                      <span className="text-slate-500">•</span>
-                      <span className="text-slate-400">
-                        Provider: <span className="text-slate-300 font-mono">{delivery.provider}</span>
+                      <span className="text-slate-400">•</span>
+                      <span className="text-slate-600">
+                        Provider: <span className="text-slate-900 font-mono">{delivery.provider}</span>
                       </span>
                     </div>
 
@@ -220,7 +220,7 @@ export function NotificationDetailModal({
                   </div>
 
                   {delivery.errorMessage && (
-                    <div className="p-2 rounded bg-rose-950/30 border border-rose-800/40 text-rose-300 text-[11px] font-mono">
+                    <div className="p-2 rounded bg-rose-50 border border-rose-200 text-rose-800 text-[11px] font-mono">
                       {delivery.errorCode && (
                         <strong className="mr-1">[{delivery.errorCode}]</strong>
                       )}
@@ -236,10 +236,10 @@ export function NotificationDetailModal({
         {/* Metadata section */}
         {notification.metadata && (
           <div className="space-y-2">
-            <label className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+            <label className="text-xs font-semibold uppercase tracking-wider text-slate-700">
               Payload Metadata
             </label>
-            <pre className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-[11px] font-mono text-slate-300 overflow-x-auto">
+            <pre className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-[11px] font-mono text-slate-800 overflow-x-auto">
               {parsedMetadata ? JSON.stringify(parsedMetadata, null, 2) : notification.metadata}
             </pre>
           </div>

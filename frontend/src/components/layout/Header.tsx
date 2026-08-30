@@ -111,13 +111,13 @@ export function Header({ onOpenMobileMenu }: HeaderProps) {
   };
 
   return (
-    <header className="h-16 shrink-0 bg-slate-950/80 backdrop-blur-md border-b border-slate-800/80 px-4 sm:px-6 flex items-center justify-between sticky top-0 z-20">
+    <header className="h-16 shrink-0 bg-white/95 backdrop-blur-md border-b border-slate-200 px-4 sm:px-6 flex items-center justify-between sticky top-0 z-20">
       {/* Left side: mobile toggle + page breadcrumb */}
       <div className="flex items-center gap-3">
         <button
           type="button"
           onClick={onOpenMobileMenu}
-          className="md:hidden p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+          className="md:hidden p-2 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition cursor-pointer"
           aria-label="Open mobile navigation menu"
         >
           <Menu className="w-5 h-5" />
@@ -125,8 +125,8 @@ export function Header({ onOpenMobileMenu }: HeaderProps) {
 
         <div className="flex items-center gap-2 text-xs font-medium">
           <span className="text-slate-400">Merchant Portal</span>
-          <span className="text-slate-600">/</span>
-          <span className="text-slate-200 font-semibold">{getBreadcrumbTitle()}</span>
+          <span className="text-slate-300">/</span>
+          <span className="text-slate-800 font-semibold">{getBreadcrumbTitle()}</span>
         </div>
       </div>
 
@@ -136,24 +136,24 @@ export function Header({ onOpenMobileMenu }: HeaderProps) {
         {isDemoMode && <DemoModeBadge onExit={handleExitDemo} />}
 
         {/* Backend health status badge */}
-        <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800 text-[11px] font-mono">
+        <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-50 border border-slate-200 text-[11px] font-mono">
           <Activity
             className={`w-3.5 h-3.5 ${
               backendStatus === 'UP'
-                ? 'text-emerald-400'
+                ? 'text-emerald-600'
                 : backendStatus === 'OFFLINE'
-                ? 'text-rose-400'
-                : 'text-amber-400 animate-spin'
+                ? 'text-rose-600'
+                : 'text-amber-500 animate-spin'
             }`}
           />
-          <span className="text-slate-400">API:</span>
+          <span className="text-slate-500">API:</span>
           <span
             className={
               backendStatus === 'UP'
-                ? 'text-emerald-400 font-semibold'
+                ? 'text-emerald-600 font-semibold'
                 : backendStatus === 'OFFLINE'
-                ? 'text-rose-400 font-semibold'
-                : 'text-amber-400'
+                ? 'text-rose-600 font-semibold'
+                : 'text-amber-600 font-semibold'
             }
           >
             {backendStatus}
@@ -163,14 +163,14 @@ export function Header({ onOpenMobileMenu }: HeaderProps) {
         {/* Notification indicator button */}
         <Link
           to="/notifications"
-          className="relative p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-900 border border-transparent hover:border-slate-800 transition focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+          className="relative p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 border border-transparent hover:border-slate-200 transition focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
           aria-label={unreadCount > 0 ? `Notifications (${unreadCount} unread)` : 'Notifications'}
           title={unreadCount > 0 ? `${unreadCount} unread notification${unreadCount > 1 ? 's' : ''}` : 'Notifications'}
         >
           <Bell className="w-4 h-4" />
           {unreadCount > 0 && (
             <span
-              className="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-indigo-600 text-[10px] font-bold text-white shadow-sm ring-2 ring-slate-950"
+              className="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-emerald-600 text-[10px] font-bold text-white shadow-2xs ring-2 ring-white"
               data-testid="notification-unread-badge"
             >
               {unreadCount > 99 ? '99+' : unreadCount}
@@ -183,17 +183,17 @@ export function Header({ onOpenMobileMenu }: HeaderProps) {
           <button
             type="button"
             onClick={() => setDropdownOpen((prev) => !prev)}
-            className="flex items-center gap-2.5 p-1.5 rounded-xl hover:bg-slate-900/90 border border-transparent hover:border-slate-800 transition focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+            className="flex items-center gap-2.5 p-1.5 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-200 transition focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
             aria-expanded={dropdownOpen}
             aria-haspopup="true"
             aria-label="Merchant account menu"
           >
             <Avatar name={isDemoMode ? 'Demo Evaluator' : user?.name || 'Merchant'} size="sm" />
             <div className="hidden md:flex flex-col text-left">
-              <span className="text-xs font-semibold text-white leading-none truncate max-w-[140px]">
+              <span className="text-xs font-semibold text-slate-900 leading-none truncate max-w-[140px]">
                 {isDemoMode ? 'Demo Evaluator' : user?.name || 'Merchant'}
               </span>
-              <span className="text-[10px] text-slate-400 truncate max-w-[140px]">
+              <span className="text-[10px] text-slate-500 truncate max-w-[140px]">
                 {isDemoMode ? 'demo@recoverai.local' : user?.email}
               </span>
             </div>
@@ -206,12 +206,12 @@ export function Header({ onOpenMobileMenu }: HeaderProps) {
 
           {/* Account Dropdown Menu */}
           {dropdownOpen && (
-            <div className="absolute right-0 mt-2 w-64 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl py-1.5 z-50 animate-in fade-in slide-in-from-top-1">
-              <div className="px-3.5 py-2.5 border-b border-slate-800/80 space-y-1">
-                <p className="text-xs font-bold text-white truncate">
+            <div className="absolute right-0 mt-2 w-64 rounded-xl bg-white border border-slate-200 shadow-xl py-1.5 z-50 animate-in fade-in slide-in-from-top-1">
+              <div className="px-3.5 py-2.5 border-b border-slate-100 space-y-1">
+                <p className="text-xs font-bold text-slate-900 truncate">
                   {isDemoMode ? 'Demo Evaluator' : user?.name}
                 </p>
-                <p className="text-[11px] text-slate-400 truncate font-mono">
+                <p className="text-[11px] text-slate-500 truncate font-mono">
                   {isDemoMode ? 'demo@recoverai.local (Simulated)' : user?.email}
                 </p>
                 <div className="flex items-center gap-2 pt-1">
@@ -219,12 +219,12 @@ export function Header({ onOpenMobileMenu }: HeaderProps) {
                     {isDemoMode ? 'DEMO MODE' : user?.status || 'ACTIVE'}
                   </Badge>
                   {!isDemoMode && user?.razorpayAccountId && (
-                    <span className="text-[10px] text-slate-400 font-mono bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800 truncate">
+                    <span className="text-[10px] text-slate-600 font-mono bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200 truncate">
                       {user.razorpayAccountId}
                     </span>
                   )}
                   {isDemoMode && (
-                    <span className="text-[10px] text-amber-300 font-mono bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 truncate">
+                    <span className="text-[10px] text-amber-800 font-mono bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 truncate">
                       Sandbox
                     </span>
                   )}
@@ -232,12 +232,12 @@ export function Header({ onOpenMobileMenu }: HeaderProps) {
               </div>
 
               <div className="px-1.5 py-1">
-                <div className="px-2 py-1.5 text-[11px] text-slate-400 flex items-center gap-2">
-                  <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
+                <div className="px-2 py-1.5 text-[11px] text-slate-600 flex items-center gap-2">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
                   <span>
                     {isDemoMode ? 'Mode: Simulated Sandbox' : 'Tenant ID: '}
                     {!isDemoMode && (
-                      <code className="text-slate-300 font-mono">
+                      <code className="text-slate-800 font-mono">
                         {user?.id ? `${user.id.slice(0, 8)}...` : 'N/A'}
                       </code>
                     )}
@@ -245,12 +245,12 @@ export function Header({ onOpenMobileMenu }: HeaderProps) {
                 </div>
               </div>
 
-              <div className="border-t border-slate-800/80 px-1.5 pt-1">
+              <div className="border-t border-slate-100 px-1.5 pt-1">
                 {isDemoMode ? (
                   <button
                     type="button"
                     onClick={handleExitDemo}
-                    className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-medium text-amber-400 hover:bg-amber-500/10 hover:text-amber-300 transition cursor-pointer text-left"
+                    className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-medium text-amber-800 hover:bg-amber-50 transition cursor-pointer text-left"
                   >
                     <LogOut className="w-4 h-4" />
                     Exit Demo Mode
@@ -259,7 +259,7 @@ export function Header({ onOpenMobileMenu }: HeaderProps) {
                   <button
                     type="button"
                     onClick={handleLogout}
-                    className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-medium text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition cursor-pointer text-left"
+                    className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-medium text-rose-600 hover:bg-rose-50 transition cursor-pointer text-left"
                   >
                     <LogOut className="w-4 h-4" />
                     Sign Out

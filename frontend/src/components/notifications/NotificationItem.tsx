@@ -76,8 +76,8 @@ export function NotificationItem({
       onClick={() => onSelect(notification)}
       className={`group relative p-4 sm:p-5 rounded-xl border transition-all duration-150 cursor-pointer ${
         isUnread
-          ? 'bg-slate-900/90 hover:bg-slate-900 border-indigo-500/30 hover:border-indigo-500/50 shadow-sm'
-          : 'bg-slate-950/60 hover:bg-slate-900/50 border-slate-800/80 hover:border-slate-700/80 opacity-90 hover:opacity-100'
+          ? 'bg-emerald-50/20 hover:bg-emerald-50/40 border-emerald-300 shadow-2xs'
+          : 'bg-white hover:bg-slate-50 border-slate-200'
       }`}
       role="article"
       aria-label={`Notification: ${notification.title}`}
@@ -87,8 +87,8 @@ export function NotificationItem({
         <div
           className={`shrink-0 w-9 h-9 rounded-xl flex items-center justify-center border transition ${
             isUnread
-              ? 'bg-indigo-600/15 border-indigo-500/30 text-indigo-400'
-              : 'bg-slate-800/60 border-slate-700/60 text-slate-400'
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-600'
+              : 'bg-slate-50 border-slate-200 text-slate-400'
           }`}
         >
           <Icon className="w-4 h-4" />
@@ -102,41 +102,41 @@ export function NotificationItem({
             </Badge>
 
             {isUnread && (
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-500/20 text-indigo-300 uppercase tracking-wider">
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800 uppercase tracking-wider">
                 Unread
               </span>
             )}
 
-            <span className="text-xs text-slate-500 ml-auto">
+            <span className="text-xs text-slate-400 ml-auto">
               {formatRelativeTime(notification.createdAt)}
             </span>
           </div>
 
           <h4
             className={`text-sm font-semibold truncate ${
-              isUnread ? 'text-white' : 'text-slate-300'
+              isUnread ? 'text-slate-900' : 'text-slate-700'
             }`}
           >
             {notification.title}
           </h4>
 
-          <p className="text-xs text-slate-400 mt-1 line-clamp-2 leading-relaxed">
+          <p className="text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed">
             {notification.message}
           </p>
 
           {/* Delivery Channel Badges */}
           {notification.deliveries && notification.deliveries.length > 0 && (
             <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-              <span className="text-[11px] text-slate-500">Delivered via:</span>
+              <span className="text-[11px] text-slate-400">Delivered via:</span>
               {notification.deliveries.map((delivery) => (
                 <span
                   key={delivery.id}
                   className={`text-[10px] px-2 py-0.5 rounded font-mono border ${
                     delivery.status === 'DELIVERED' || delivery.status === 'SENT'
-                      ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/40'
+                      ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                       : delivery.status === 'FAILED'
-                      ? 'bg-rose-950/40 text-rose-300 border-rose-800/40'
-                      : 'bg-slate-900 text-slate-400 border-slate-800'
+                      ? 'bg-rose-50 text-rose-800 border-rose-200'
+                      : 'bg-slate-100 text-slate-600 border-slate-200'
                   }`}
                   title={`${delivery.channel} (${delivery.status}) via ${delivery.provider}`}
                 >
@@ -179,7 +179,7 @@ export function NotificationItem({
             className="p-1.5 h-auto"
           >
             <Eye className="w-3.5 h-3.5" />
-            <ChevronRight className="w-3.5 h-3.5 ml-0.5 text-slate-500" />
+            <ChevronRight className="w-3.5 h-3.5 ml-0.5 text-slate-400" />
           </Button>
         </div>
       </div>

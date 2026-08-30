@@ -25,7 +25,7 @@ export function SettingsLayout() {
       />
 
       {/* Secondary Settings Navigation Tabs */}
-      <div className="border-b border-slate-800">
+      <div className="border-b border-slate-200">
         <nav
           className="flex space-x-2 sm:space-x-4 overflow-x-auto pb-px"
           aria-label="Settings navigation"
@@ -42,13 +42,13 @@ export function SettingsLayout() {
                 to={tab.href}
                 className={`inline-flex items-center gap-2 px-3.5 py-2.5 text-xs sm:text-sm font-medium border-b-2 whitespace-nowrap transition-colors duration-150 ${
                   isActive
-                    ? 'border-indigo-500 text-indigo-400 font-semibold'
-                    : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                    ? 'border-emerald-600 text-emerald-700 font-semibold'
+                    : 'border-transparent text-slate-500 hover:text-slate-900 hover:border-slate-300'
                 }`}
                 aria-current={isActive ? 'page' : undefined}
               >
                 <Icon
-                  className={`w-4 h-4 ${isActive ? 'text-indigo-400' : 'text-slate-500'}`}
+                  className={`w-4 h-4 ${isActive ? 'text-emerald-600' : 'text-slate-400'}`}
                   aria-hidden="true"
                 />
                 <span>{tab.name}</span>

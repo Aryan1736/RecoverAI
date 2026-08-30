@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Zap, ShieldCheck, ArrowRight, Lock, Mail, Building, CreditCard } from 'lucide-react';
+import { Zap, ShieldCheck, ArrowRight, Building, CreditCard } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../hooks/useToast';
 import { Button } from '../../components/ui/Button';
@@ -70,7 +70,6 @@ export function RegisterPage() {
 
     setIsSubmitting(true);
     try {
-      // 1. Call registration API
       await register({
         name: name.trim(),
         email: email.trim(),
@@ -78,13 +77,13 @@ export function RegisterPage() {
         razorpayAccountId: razorpayAccountId.trim() || undefined,
       });
 
-      // 2. Automatically authenticate upon successful registration
+      // Auto login after registration
       await login({
         email: email.trim(),
         password,
       });
 
-      toast.success('Merchant account registered successfully! Welcome to RecoverAI.');
+      toast.success('Merchant account registered successfully!');
       navigate('/app', { replace: true });
     } catch (err: unknown) {
       setFormError(getHumanReadableErrorMessage(err));
@@ -94,100 +93,108 @@ export function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center py-10 sm:px-6 lg:px-8 relative selection:bg-indigo-500 selection:text-white">
-      {/* Background glow accents */}
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col justify-center py-12 sm:px-6 lg:px-8 relative selection:bg-emerald-500 selection:text-white">
+      {/* Subtle ambient light accents */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
-        <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-96 h-96 bg-indigo-600/15 rounded-full blur-3xl" />
-        <div className="absolute -bottom-40 left-1/4 w-80 h-80 bg-blue-600/10 rounded-full blur-3xl" />
+        <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-96 h-96 bg-emerald-100/40 rounded-full blur-3xl" />
+        <div className="absolute -bottom-40 right-1/4 w-80 h-80 bg-teal-100/30 rounded-full blur-3xl" />
       </div>
 
-      <div className="sm:mx-auto sm:w-full sm:max-w-lg relative z-10 px-4">
+      <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10 px-4">
         {/* Brand Header */}
-        <div className="flex flex-col items-center text-center mb-6 space-y-2">
-          <div className="inline-flex p-3 rounded-2xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 mb-1 shadow-inner">
+        <div className="flex flex-col items-center text-center mb-8 space-y-2">
+          <div className="inline-flex p-3 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-200 mb-1 shadow-2xs">
             <Zap className="w-7 h-7" />
           </div>
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-            <ShieldCheck className="w-3.5 h-3.5" />
-            Track 3 Submission • Merchant Onboarding
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+            Track 3 • Razorpay Buildathon
           </span>
-          <h1 className="text-2xl font-bold tracking-tight text-white mt-1">
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 mt-1">
             Create your Merchant Account
           </h1>
-          <p className="text-xs text-slate-400 max-w-sm">
-            Deploy autonomous AI recovery intelligence across your Razorpay payments
+          <p className="text-xs text-slate-500 max-w-xs">
+            Activate autonomous payment recovery and AI diagnostics
           </p>
         </div>
 
-        {/* Form Card */}
-        <div className="bg-slate-900/80 border border-slate-800 backdrop-blur-xl rounded-2xl p-6 sm:p-8 shadow-2xl space-y-5">
-          {formError && (
-            <Alert type="error" title="Registration Error" dismissible onDismiss={() => setFormError(null)}>
+        {/* Global Error Banner */}
+        {formError && (
+          <div className="mb-4">
+            <Alert type="error" title="Registration Failed">
               {formError}
             </Alert>
-          )}
+          </div>
+        )}
 
-          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+        {/* Main Registration Card */}
+        <div className="bg-white border border-slate-200/90 rounded-2xl p-6 sm:p-8 shadow-xs space-y-5">
+          <form onSubmit={handleSubmit} noValidate className="space-y-4">
             <Input
               label="Merchant / Business Name"
-              placeholder="e.g. Acme Payments Ltd"
+              id="register-name"
+              placeholder="Acme Corp Pvt Ltd"
               value={name}
               onChange={(e) => setName(e.target.value)}
               error={errors.name}
-              leftIcon={<Building className="w-4 h-4" />}
               required
+              leftIcon={<Building className="w-4 h-4" />}
+              disabled={isSubmitting}
             />
 
             <Input
               label="Business Email"
+              id="register-email"
               type="email"
-              placeholder="merchant@company.com"
+              placeholder="finance@acme.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               error={errors.email}
-              leftIcon={<Mail className="w-4 h-4" />}
-              autoComplete="email"
               required
+              autoComplete="email"
+              disabled={isSubmitting}
             />
 
             <Input
               label="Razorpay Account ID (Optional)"
-              placeholder="acc_xxxxxxxxxxxxxx"
+              id="register-razorpay"
+              placeholder="acc_K3L9abcdef123"
               value={razorpayAccountId}
               onChange={(e) => setRazorpayAccountId(e.target.value)}
               error={errors.razorpayAccountId}
-              helperText="Connected Razorpay merchant ID for webhook event routing"
+              helperText="Connects your payment gateway directly to RecoverAI"
               leftIcon={<CreditCard className="w-4 h-4" />}
+              disabled={isSubmitting}
             />
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <PasswordInput
-                label="Password"
-                placeholder="Min 8 characters"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                error={errors.password}
-                leftIcon={<Lock className="w-4 h-4" />}
-                autoComplete="new-password"
-                required
-              />
+            <PasswordInput
+              label="Password"
+              id="register-password"
+              placeholder="Minimum 8 characters"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              error={errors.password}
+              required
+              autoComplete="new-password"
+              disabled={isSubmitting}
+            />
 
-              <PasswordInput
-                label="Confirm Password"
-                placeholder="Repeat password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                error={errors.confirmPassword}
-                leftIcon={<Lock className="w-4 h-4" />}
-                autoComplete="new-password"
-                required
-              />
-            </div>
+            <PasswordInput
+              label="Confirm Password"
+              id="register-confirm-password"
+              placeholder="Re-enter your password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              error={errors.confirmPassword}
+              required
+              autoComplete="new-password"
+              disabled={isSubmitting}
+            />
 
             <Button
               type="submit"
               variant="primary"
-              size="md"
+              size="lg"
               className="w-full mt-2"
               isLoading={isSubmitting}
               rightIcon={<ArrowRight className="w-4 h-4" />}
@@ -196,22 +203,16 @@ export function RegisterPage() {
             </Button>
           </form>
 
-          <div className="pt-4 border-t border-slate-800 text-center text-xs text-slate-400">
-            Already have a merchant account?{' '}
+          {/* Login link */}
+          <div className="pt-2 text-center text-xs text-slate-500 border-t border-slate-100">
+            <span>Already have an account? </span>
             <Link
               to="/login"
-              className="font-medium text-indigo-400 hover:text-indigo-300 hover:underline transition"
+              className="font-semibold text-emerald-600 hover:text-emerald-700 hover:underline focus:outline-none focus:underline"
             >
-              Sign in
+              Sign in here
             </Link>
           </div>
-        </div>
-
-        <div className="text-center mt-6 text-xs text-slate-400 space-y-1">
-          <p className="flex items-center justify-center gap-1.5">
-            <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
-            Zero credentials exposed. Multi-tenant isolation verified.
-          </p>
         </div>
       </div>
     </div>

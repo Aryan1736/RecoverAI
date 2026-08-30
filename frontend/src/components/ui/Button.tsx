@@ -29,7 +29,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     ref
   ) => {
     const baseStyles =
-      'inline-flex items-center justify-center font-medium rounded-lg transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer select-none';
+      'inline-flex items-center justify-center font-medium rounded-lg transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer select-none';
 
     const sizeStyles = {
       sm: 'px-3 py-1.5 text-xs gap-1.5',
@@ -39,15 +39,15 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 
     const variantStyles = {
       primary:
-        'bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white shadow-sm hover:shadow border border-indigo-500/20 focus-visible:ring-offset-slate-950',
+        'bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white shadow-xs border border-emerald-600 focus-visible:ring-emerald-500',
       secondary:
-        'bg-slate-800 hover:bg-slate-700 active:bg-slate-850 text-slate-100 border border-slate-700/60 focus-visible:ring-offset-slate-950',
+        'bg-white hover:bg-slate-50 active:bg-slate-100 text-slate-700 border border-slate-200 shadow-xs focus-visible:ring-slate-300',
       outline:
-        'bg-transparent hover:bg-slate-800/60 active:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 focus-visible:ring-offset-slate-950',
+        'bg-transparent hover:bg-slate-100 active:bg-slate-200 text-slate-700 border border-slate-200 focus-visible:ring-slate-300',
       ghost:
-        'bg-transparent hover:bg-slate-800/60 active:bg-slate-800 text-slate-300 hover:text-white focus-visible:ring-offset-slate-950',
+        'bg-transparent hover:bg-slate-100 active:bg-slate-200 text-slate-700 focus-visible:ring-slate-300',
       danger:
-        'bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white border border-rose-500/30 focus-visible:ring-rose-500 focus-visible:ring-offset-slate-950',
+        'bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white shadow-xs border border-rose-600 focus-visible:ring-rose-500',
     };
 
     return (

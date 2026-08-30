@@ -30,17 +30,17 @@ export function Alert({
   };
 
   const typeStyles = {
-    info: 'bg-indigo-950/40 border-indigo-500/30 text-indigo-200',
-    success: 'bg-emerald-950/40 border-emerald-500/30 text-emerald-200',
-    warning: 'bg-amber-950/40 border-amber-500/30 text-amber-200',
-    error: 'bg-rose-950/40 border-rose-500/30 text-rose-200',
+    info: 'bg-blue-50 border-blue-200 text-blue-900',
+    success: 'bg-emerald-50 border-emerald-200 text-emerald-900',
+    warning: 'bg-amber-50 border-amber-200 text-amber-900',
+    error: 'bg-rose-50 border-rose-200 text-rose-900',
   };
 
   const icons = {
-    info: <Info className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" aria-hidden="true" />,
-    success: <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" aria-hidden="true" />,
-    warning: <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" aria-hidden="true" />,
-    error: <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" aria-hidden="true" />,
+    info: <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" aria-hidden="true" />,
+    success: <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" aria-hidden="true" />,
+    warning: <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />,
+    error: <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" aria-hidden="true" />,
   };
 
   return (
@@ -57,7 +57,7 @@ export function Alert({
         <button
           type="button"
           onClick={handleDismiss}
-          className="text-slate-400 hover:text-white transition p-0.5 rounded cursor-pointer"
+          className="text-slate-400 hover:text-slate-700 transition p-0.5 rounded cursor-pointer"
           aria-label="Dismiss alert"
         >
           <X className="w-3.5 h-3.5" aria-hidden="true" />

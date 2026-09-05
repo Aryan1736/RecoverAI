@@ -24,7 +24,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
     return (
       <div className="w-full space-y-1.5 text-left">
         {label && (
-          <label htmlFor={selectId} className="block text-xs font-semibold uppercase tracking-wider text-slate-700">
+          <label htmlFor={selectId} className="block text-xs font-semibold uppercase tracking-wider text-[#111318]">
             {label}
             {props.required && <span className="text-rose-500 ml-1" aria-hidden="true">*</span>}
           </label>
@@ -37,10 +37,10 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
             disabled={disabled}
             aria-invalid={Boolean(error)}
             aria-describedby={error ? errorId : helperText ? helperId : undefined}
-            className={`w-full appearance-none rounded-lg bg-white text-slate-900 text-sm border shadow-2xs transition duration-150 focus:outline-none focus:ring-2 disabled:opacity-50 disabled:bg-slate-50 disabled:cursor-not-allowed pl-3.5 pr-10 py-2 cursor-pointer ${
+            className={`w-full appearance-none rounded-lg bg-white text-[#111318] text-sm border shadow-2xs transition duration-150 focus:outline-none focus:ring-2 disabled:opacity-50 disabled:bg-[#F1F4F2] disabled:cursor-not-allowed pl-3.5 pr-10 py-2 cursor-pointer ${
               error
                 ? 'border-rose-300 focus:ring-rose-500/20 focus:border-rose-600 text-rose-900'
-                : 'border-slate-200 hover:border-slate-300 focus:ring-emerald-500/20 focus:border-emerald-600'
+                : 'border-[#E5E9E6] hover:border-[#D1D7D3] focus:ring-[#0B8F63]/20 focus:border-[#0B8F63]'
             } ${className}`}
             {...props}
           >

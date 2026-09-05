@@ -82,10 +82,10 @@ export function Pagination({
                 onClick={() => onPageChange(p)}
                 aria-current={isCurrent ? 'page' : undefined}
                 aria-label={`Page ${p + 1}`}
-                className={`min-w-8 h-8 px-2 rounded-lg text-xs font-medium transition cursor-pointer ${
+                className={`min-w-8 h-8 px-2 rounded-lg text-xs font-medium transition cursor-pointer border ${
                   isCurrent
-                    ? 'bg-emerald-600 text-white font-bold'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                    ? 'bg-[#E8F7F0] text-[#08704F] font-bold border-[#0B8F63]/30 shadow-2xs'
+                    : 'text-[#667085] hover:text-[#111318] hover:bg-[#F1F4F2] border-transparent'
                 }`}
               >
                 {p + 1}

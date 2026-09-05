@@ -11,7 +11,7 @@ export function AppShell({ children }: AppShellProps) {
   const [isMobileOpen, setIsMobileOpen] = useState<boolean>(false);
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex selection:bg-emerald-500 selection:text-white">
+    <div className="min-h-screen bg-[#F7F8F6] text-[#111318] flex selection:bg-[#0B8F63] selection:text-white">
       {/* Sidebar Navigation */}
       <Sidebar
         isCollapsed={isCollapsed}

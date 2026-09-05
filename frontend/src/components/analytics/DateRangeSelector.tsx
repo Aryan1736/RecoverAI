@@ -105,12 +105,12 @@ export function DateRangeSelector({
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 font-inter">
       {/* Preset Pill Buttons */}
-      <div className="flex flex-wrap items-center gap-1.5 p-1 bg-white rounded-xl border border-slate-200 text-xs shadow-2xs">
-        <div className="flex items-center gap-1.5 px-2.5 py-1 text-slate-500 font-medium">
-          <Calendar className="w-3.5 h-3.5 text-emerald-600" />
-          <span className="hidden sm:inline">Range:</span>
+      <div className="inline-flex flex-wrap items-center gap-1 p-1 bg-[#F1F4F2] rounded-xl border border-[#E5E9E6] text-xs">
+        <div className="flex items-center gap-1.5 px-2.5 py-1 text-[#667085] font-medium">
+          <Calendar className="w-3.5 h-3.5 text-[#0B8F63]" />
+          <span className="hidden sm:inline text-[11px] font-semibold uppercase tracking-wider text-[#667085]">Window:</span>
         </div>
 
         {presets.map((preset) => {
@@ -121,10 +121,10 @@ export function DateRangeSelector({
               type="button"
               disabled={disabled}
               onClick={() => handleSelectPreset(preset.id)}
-              className={`px-3 py-1.5 rounded-lg font-medium transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
                 isActive
-                  ? 'bg-emerald-600 text-white shadow-2xs font-semibold'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  ? 'bg-[#E8F7F0] text-[#08704F] font-semibold border border-[#0B8F63]/30 shadow-2xs'
+                  : 'text-[#667085] hover:text-[#111318] hover:bg-white/80 border border-transparent'
               }`}
             >
               {preset.label}
@@ -137,10 +137,10 @@ export function DateRangeSelector({
       {showCustom && (
         <form
           onSubmit={handleApplyCustom}
-          className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-start sm:items-end gap-3 text-xs"
+          className="p-3 bg-white rounded-xl border border-[#E5E9E6] shadow-2xs flex flex-col sm:flex-row items-start sm:items-end gap-3 text-xs"
         >
           <div className="space-y-1">
-            <label htmlFor={fromId} className="block text-[11px] font-semibold text-slate-700 uppercase">
+            <label htmlFor={fromId} className="block text-[11px] font-bold text-[#667085] uppercase tracking-wider">
               From Date
             </label>
             <input
@@ -149,12 +149,12 @@ export function DateRangeSelector({
               value={customFrom}
               disabled={disabled}
               onChange={(e) => setCustomFrom(e.target.value)}
-              className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 shadow-2xs"
+              className="px-3 py-1.5 bg-[#F7F8F6] border border-[#E5E9E6] rounded-lg text-[#111318] focus:outline-none focus:ring-2 focus:ring-[#0B8F63]/20 focus:border-[#0B8F63] shadow-2xs font-mono"
             />
           </div>
 
           <div className="space-y-1">
-            <label htmlFor={toId} className="block text-[11px] font-semibold text-slate-700 uppercase">
+            <label htmlFor={toId} className="block text-[11px] font-bold text-[#667085] uppercase tracking-wider">
               To Date
             </label>
             <input
@@ -163,16 +163,22 @@ export function DateRangeSelector({
               value={customTo}
               disabled={disabled}
               onChange={(e) => setCustomTo(e.target.value)}
-              className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 shadow-2xs"
+              className="px-3 py-1.5 bg-[#F7F8F6] border border-[#E5E9E6] rounded-lg text-[#111318] focus:outline-none focus:ring-2 focus:ring-[#0B8F63]/20 focus:border-[#0B8F63] shadow-2xs font-mono"
             />
           </div>
 
-          <Button type="submit" size="sm" variant="primary" disabled={disabled}>
+          <Button
+            type="submit"
+            size="sm"
+            variant="primary"
+            disabled={disabled}
+            className="bg-[#0B8F63] hover:bg-[#08704F] text-white font-semibold text-xs px-3 py-1.5 rounded-lg shadow-2xs cursor-pointer transition-all duration-150"
+          >
             Apply Range
           </Button>
 
           {customError && (
-            <div className="flex items-center gap-1.5 text-rose-600 text-xs self-center">
+            <div className="flex items-center gap-1.5 text-[#DC2626] text-xs self-center font-medium">
               <AlertCircle className="w-4 h-4 shrink-0" />
               <span>{customError}</span>
             </div>

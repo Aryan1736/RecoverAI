@@ -11,6 +11,8 @@ import {
   AlertTriangle,
   Radio,
   Check,
+  Shield,
+  Sparkles,
 } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
@@ -65,16 +67,76 @@ const EVENTS: EventMeta[] = [
   },
 ];
 
+const EVENT_CONFIG: Record<
+  MerchantNotificationEvent,
+  {
+    iconBg: string;
+    iconBorder: string;
+    iconText: string;
+    badgeBg: string;
+    badgeText: string;
+  }
+> = {
+  PAYMENT_RECOVERED: {
+    iconBg: 'bg-[#E8F7F0]',
+    iconBorder: 'border-[#0B8F63]/30',
+    iconText: 'text-[#08704F]',
+    badgeBg: 'bg-[#E8F7F0]',
+    badgeText: 'text-[#08704F]',
+  },
+  CASE_EXHAUSTED: {
+    iconBg: 'bg-[#FEE2E2]',
+    iconBorder: 'border-[#DC2626]/30',
+    iconText: 'text-[#DC2626]',
+    badgeBg: 'bg-[#FEE2E2]',
+    badgeText: 'text-[#DC2626]',
+  },
+  HIGH_PRIORITY_FAILURE: {
+    iconBg: 'bg-[#FEF3C7]',
+    iconBorder: 'border-[#D97706]/30',
+    iconText: 'text-[#D97706]',
+    badgeBg: 'bg-[#FEF3C7]',
+    badgeText: 'text-[#D97706]',
+  },
+  PROVIDER_DEGRADED: {
+    iconBg: 'bg-[#FFF7ED]',
+    iconBorder: 'border-[#EA580C]/30',
+    iconText: 'text-[#C2410C]',
+    badgeBg: 'bg-[#FFF7ED]',
+    badgeText: 'text-[#C2410C]',
+  },
+};
+
 interface ChannelMeta {
   key: MerchantNotificationChannel;
   label: string;
+  sublabel: string;
   icon: typeof Mail;
+  description: string;
 }
 
 const CHANNELS: ChannelMeta[] = [
-  { key: 'EMAIL', label: 'Email', icon: Mail },
-  { key: 'WEBHOOK', label: 'Webhook', icon: Webhook },
-  { key: 'IN_APP', label: 'In-App', icon: Bell },
+  {
+    key: 'EMAIL',
+    label: 'Email',
+    sublabel: 'Merchant inbox',
+    icon: Mail,
+    description: 'Operational recovery notifications dispatched to your verified administrative email address.',
+  },
+  {
+    key: 'WEBHOOK',
+    label: 'Webhook',
+    sublabel: 'System integration',
+    icon: Webhook,
+    description: 'Machine-readable JSON event payloads dispatched to your configured endpoint with HMAC-SHA256 signatures.',
+  },
+  {
+    key: 'IN_APP',
+    label: 'In-App',
+    sublabel: 'RecoverAI console',
+    icon: Bell,
+    description: 'Real-time alerts and activity entries published directly to the RecoverAI console & notification feed.',
+  },
 ];
 
 type PreferencesMap = Record<
@@ -227,6 +289,33 @@ export function NotificationPreferencesMatrix() {
     return false;
   }, [persistedData, preferences, webhookUrl]);
 
+  // Derived operational summary metrics
+  const summaryMetrics = useMemo(() => {
+    const totalEvents = EVENTS.length;
+    let enabledEventsCount = 0;
+    let activeRulesCount = 0;
+
+    for (const ev of EVENTS) {
+      const hasAnyEnabled = CHANNELS.some((ch) => Boolean(preferences[ev.key]?.[ch.key]));
+      if (hasAnyEnabled) {
+        enabledEventsCount++;
+      }
+      for (const ch of CHANNELS) {
+        if (preferences[ev.key]?.[ch.key]) {
+          activeRulesCount++;
+        }
+      }
+    }
+
+    return {
+      totalEvents,
+      enabledEventsCount,
+      deliveryChannelsCount: CHANNELS.length,
+      activeRulesCount,
+      totalRulesCapacity: totalEvents * CHANNELS.length,
+    };
+  }, [preferences]);
+
   const handleToggle = (event: MerchantNotificationEvent, channel: MerchantNotificationChannel) => {
     setPreferences((prev) => ({
       ...prev,
@@ -293,8 +382,18 @@ export function NotificationPreferencesMatrix() {
   if (isLoading) {
     return (
       <div className="space-y-6" role="status" aria-label="Loading preferences">
-        <Skeleton className="h-40 w-full rounded-2xl" />
-        <Skeleton className="h-64 w-full rounded-2xl" />
+        {/* Summary Skeleton */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {[1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} className="h-24 w-full rounded-xl bg-white border border-[#E5E9E6]" />
+          ))}
+        </div>
+        {/* Toolbar Skeleton */}
+        <Skeleton className="h-16 w-full rounded-xl bg-white border border-[#E5E9E6]" />
+        {/* Matrix Table Skeleton */}
+        <Skeleton className="h-72 w-full rounded-xl bg-white border border-[#E5E9E6]" />
+        {/* Webhook Card Skeleton */}
+        <Skeleton className="h-44 w-full rounded-xl bg-white border border-[#E5E9E6]" />
       </div>
     );
   }
@@ -311,10 +410,93 @@ export function NotificationPreferencesMatrix() {
 
   return (
     <div className="space-y-6">
-      {/* Top Action Bar with Dirty indicator */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-white border border-slate-200 shadow-2xs">
-        <div className="flex items-center gap-2.5">
-          <h3 className="text-sm font-semibold text-slate-900">Event Channel Matrix</h3>
+      {/* ==================================================
+          1. COMPACT OPERATIONAL SUMMARY STRIP
+          ================================================== */}
+      <section
+        aria-label="Notification Operations Summary"
+        className="bg-white border border-[#E5E9E6] rounded-xl p-4 sm:p-5 shadow-2xs"
+      >
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 divide-y md:divide-y-0 md:divide-x divide-[#ECEFEA]">
+          {/* Total Configurable Events */}
+          <div className="flex flex-col justify-between pt-2 md:pt-0 first:pt-0">
+            <span className="text-[11px] font-semibold text-[#667085] uppercase tracking-[0.06em]">
+              TOTAL EVENTS
+            </span>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="font-space-grotesk text-2xl sm:text-3xl font-bold text-[#111318] tracking-tight">
+                {summaryMetrics.totalEvents}
+              </span>
+              <span className="text-xs text-[#667085]">lifecycle types</span>
+            </div>
+            <p className="mt-1 text-[11px] text-[#98A2B3]">
+              Deterministic recovery states
+            </p>
+          </div>
+
+          {/* Enabled Events */}
+          <div className="flex flex-col justify-between pt-3 md:pt-0 md:pl-5">
+            <span className="text-[11px] font-semibold text-[#667085] uppercase tracking-[0.06em]">
+              ENABLED EVENTS
+            </span>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="font-space-grotesk text-2xl sm:text-3xl font-bold text-[#08704F] tracking-tight">
+                {summaryMetrics.enabledEventsCount}
+              </span>
+              <span className="text-xs text-[#667085]">
+                of {summaryMetrics.totalEvents} active
+              </span>
+            </div>
+            <p className="mt-1 text-[11px] text-[#98A2B3]">
+              Events with ≥1 channel active
+            </p>
+          </div>
+
+          {/* Supported Delivery Channels */}
+          <div className="flex flex-col justify-between pt-3 md:pt-0 md:pl-5">
+            <span className="text-[11px] font-semibold text-[#667085] uppercase tracking-[0.06em]">
+              DELIVERY CHANNELS
+            </span>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="font-space-grotesk text-2xl sm:text-3xl font-bold text-[#111318] tracking-tight">
+                {summaryMetrics.deliveryChannelsCount}
+              </span>
+              <span className="text-xs text-[#667085]">supported</span>
+            </div>
+            <p className="mt-1 text-[11px] text-[#98A2B3]">
+              Email, Webhook, and In-App
+            </p>
+          </div>
+
+          {/* Active Rules Count */}
+          <div className="flex flex-col justify-between pt-3 md:pt-0 md:pl-5">
+            <span className="text-[11px] font-semibold text-[#667085] uppercase tracking-[0.06em]">
+              ACTIVE RULES
+            </span>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="font-space-grotesk text-2xl sm:text-3xl font-bold text-[#0B8F63] tracking-tight">
+                {summaryMetrics.activeRulesCount}
+              </span>
+              <span className="text-xs text-[#667085]">
+                / {summaryMetrics.totalRulesCapacity} routes
+              </span>
+            </div>
+            <p className="mt-1 text-[11px] text-[#98A2B3]">
+              Event-to-channel dispatches
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* ==================================================
+          2. ACTION TOOLBAR & STATE STATUS
+          ================================================== */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-white border border-[#E5E9E6] shadow-2xs">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div>
+            <h2 className="text-sm font-semibold text-[#111318]">Event Channel Matrix</h2>
+            <p className="text-xs text-[#667085]">Notification Preferences &amp; Delivery Rules</p>
+          </div>
           {isDirty ? (
             <Badge variant="warning" dot pulse>
               Unsaved Changes
@@ -323,6 +505,12 @@ export function NotificationPreferencesMatrix() {
             <Badge variant="success" dot>
               Persisted
             </Badge>
+          )}
+          {isDemoMode && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#FEF3C7] text-[#D97706] border border-[#D97706]/30">
+              <Sparkles className="w-3 h-3 text-[#D97706]" />
+              <span>Sandbox State</span>
+            </span>
           )}
         </div>
 
@@ -333,6 +521,7 @@ export function NotificationPreferencesMatrix() {
             onClick={handleReset}
             disabled={!isDirty || isSaving}
             leftIcon={<RotateCcw className="w-3.5 h-3.5" />}
+            className="border-[#E5E9E6] text-[#111318] hover:bg-[#F1F4F2]"
           >
             Reset
           </Button>
@@ -343,19 +532,26 @@ export function NotificationPreferencesMatrix() {
             disabled={!isDirty}
             isLoading={isSaving}
             leftIcon={<Save className="w-3.5 h-3.5" />}
+            className="bg-[#0B8F63] hover:bg-[#08704F] text-white border-transparent shadow-2xs"
           >
             Save Changes
           </Button>
         </div>
       </div>
 
-      {/* Preferences Matrix Table */}
-      <Card className="overflow-hidden border-slate-200 p-0 shadow-2xs">
+      {/* ==================================================
+          3. NOTIFICATION PREFERENCES MATRIX TABLE
+          ================================================== */}
+      <Card className="overflow-hidden border-[#E5E9E6] p-0 shadow-2xs bg-white">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm" role="grid" aria-label="Notification Preferences Matrix">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50 text-slate-600">
-                <th className="py-3.5 px-4 sm:px-6 text-xs font-semibold uppercase tracking-wider">
+          <table
+            className="w-full text-left text-sm block md:table"
+            role="grid"
+            aria-label="Notification Preferences Matrix"
+          >
+            <thead className="hidden md:table-header-group">
+              <tr className="border-b border-[#E5E9E6] bg-[#F1F4F2]/70 text-[#667085]">
+                <th className="py-3.5 px-4 sm:px-6 text-[11px] font-semibold uppercase tracking-[0.06em] min-w-[280px]">
                   Lifecycle Event
                 </th>
                 {CHANNELS.map((ch) => {
@@ -363,37 +559,50 @@ export function NotificationPreferencesMatrix() {
                   return (
                     <th
                       key={ch.key}
-                      className="py-3.5 px-4 sm:px-6 text-center text-xs font-semibold uppercase tracking-wider"
+                      className="py-3.5 px-4 sm:px-6 text-center text-[11px] font-semibold uppercase tracking-[0.06em] min-w-[130px]"
                     >
-                      <div className="inline-flex items-center gap-1.5 justify-center">
-                        <Icon className="w-4 h-4 text-slate-500" aria-hidden="true" />
-                        <span>{ch.label}</span>
+                      <div className="inline-flex flex-col items-center justify-center gap-1">
+                        <div className="inline-flex items-center gap-1.5 justify-center text-[#111318]">
+                          <Icon className="w-3.5 h-3.5 text-[#0B8F63]" aria-hidden="true" />
+                          <span>{ch.label}</span>
+                        </div>
+                        <span className="text-[10px] text-[#98A2B3] normal-case tracking-normal font-normal">
+                          {ch.sublabel}
+                        </span>
                       </div>
                     </th>
                   );
                 })}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="block divide-y divide-[#ECEFEA] md:table-row-group">
               {EVENTS.map((event) => {
                 const EventIcon = event.icon;
+                const config = EVENT_CONFIG[event.key];
                 return (
                   <tr
                     key={event.key}
-                    className="hover:bg-slate-50/70 transition-colors duration-150"
+                    className="block p-4 sm:p-5 space-y-3 hover:bg-[#F7F8F6] transition-colors duration-150 md:table-row md:p-0 md:space-y-0"
                   >
-                    <td className="py-4 px-4 sm:px-6">
+                    <td className="block p-0 md:table-cell md:py-4 md:px-6">
                       <div className="flex items-start gap-3">
-                        <div className="p-2 rounded-lg bg-slate-100 border border-slate-200 text-slate-700 shrink-0 mt-0.5">
+                        <div
+                          className={`p-2 rounded-lg border shrink-0 mt-0.5 ${config.iconBg} ${config.iconBorder} ${config.iconText}`}
+                        >
                           <EventIcon className="w-4 h-4" />
                         </div>
-                        <div>
-                          <div className="font-semibold text-slate-900 text-sm">
-                            {event.title}
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-semibold text-[#111318] text-sm">
+                              {event.title}
+                            </span>
+                            <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-[#F1F4F2] text-[#667085] border border-[#E5E9E6]">
+                              {event.key}
+                            </span>
                           </div>
-                          <div className="text-xs text-slate-500 mt-0.5 max-w-md">
+                          <p className="text-xs text-[#667085] leading-relaxed max-w-md">
                             {event.description}
-                          </div>
+                          </p>
                         </div>
                       </div>
                     </td>
@@ -401,12 +610,24 @@ export function NotificationPreferencesMatrix() {
                     {CHANNELS.map((channel) => {
                       const enabled = Boolean(preferences[event.key]?.[channel.key]);
                       const controlId = `pref-${event.key}-${channel.key}`;
+                      const ChannelIcon = channel.icon;
 
                       return (
                         <td
                           key={channel.key}
-                          className="py-4 px-4 sm:px-6 text-center align-middle"
+                          className="flex items-center justify-between py-2 px-2 rounded-lg bg-[#F7F8F6]/60 border border-[#ECEFEA] md:border-none md:bg-transparent md:table-cell md:py-4 md:px-6 md:text-center md:align-middle"
                         >
+                          {/* Mobile-only channel identifier */}
+                          <div className="flex items-center gap-2 md:hidden">
+                            <div className="w-5 h-5 rounded bg-[#E8F7F0] text-[#08704F] flex items-center justify-center">
+                              <ChannelIcon className="w-3 h-3" />
+                            </div>
+                            <span className="text-xs font-medium text-[#111318]">
+                              {channel.label} Channel
+                            </span>
+                          </div>
+
+                          {/* Accessible Toggle Switch */}
                           <button
                             type="button"
                             role="switch"
@@ -414,8 +635,8 @@ export function NotificationPreferencesMatrix() {
                             aria-checked={enabled}
                             aria-label={`Enable ${channel.label} for ${event.title}`}
                             onClick={() => handleToggle(event.key, channel.key)}
-                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:ring-offset-2 ${
-                              enabled ? 'bg-emerald-600' : 'bg-slate-200'
+                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#0B8F63]/30 focus:ring-offset-2 ${
+                              enabled ? 'bg-[#0B8F63]' : 'bg-[#E5E9E6]'
                             }`}
                           >
                             <span
@@ -424,7 +645,7 @@ export function NotificationPreferencesMatrix() {
                               }`}
                             >
                               {enabled && (
-                                <Check className="w-3 h-3 text-emerald-600 stroke-[3]" />
+                                <Check className="w-3 h-3 text-[#0B8F63] stroke-[3]" />
                               )}
                             </span>
                           </button>
@@ -439,12 +660,39 @@ export function NotificationPreferencesMatrix() {
         </div>
       </Card>
 
-      {/* Webhook Configuration Section */}
-      <Card className="border-slate-200 shadow-2xs space-y-4">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+      {/* ==================================================
+          4. CHANNEL DELIVERY SCOPE CARDS
+          ================================================== */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {CHANNELS.map((ch) => {
+          const Icon = ch.icon;
+          return (
+            <div
+              key={ch.key}
+              className="p-4 rounded-xl bg-white border border-[#E5E9E6] shadow-2xs space-y-1.5"
+            >
+              <div className="flex items-center gap-2 text-xs font-semibold text-[#111318]">
+                <div className="w-6 h-6 rounded-md bg-[#E8F7F0] text-[#08704F] flex items-center justify-center">
+                  <Icon className="w-3.5 h-3.5" />
+                </div>
+                <span>{ch.label} Delivery</span>
+              </div>
+              <p className="text-[11px] text-[#667085] leading-relaxed">
+                {ch.description}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ==================================================
+          5. WEBHOOK CONFIGURATION SECTION
+          ================================================== */}
+      <Card className="border-[#E5E9E6] shadow-2xs space-y-4 bg-white p-5 sm:p-6">
+        <div className="flex items-center justify-between pb-3 border-b border-[#ECEFEA]">
           <div className="flex items-center gap-2">
-            <Webhook className="w-4 h-4 text-emerald-600" />
-            <h3 className="text-sm font-semibold text-slate-900">Merchant Webhook Endpoint</h3>
+            <Webhook className="w-4 h-4 text-[#0B8F63]" />
+            <h3 className="text-sm font-semibold text-[#111318]">Merchant Webhook Endpoint</h3>
           </div>
           {webhookUrl ? (
             <Badge variant="success" dot>
@@ -455,8 +703,8 @@ export function NotificationPreferencesMatrix() {
           )}
         </div>
 
-        <div className="space-y-3">
-          <p className="text-xs text-slate-500">
+        <div className="space-y-4">
+          <p className="text-xs text-[#667085] leading-relaxed">
             RecoverAI delivers real-time JSON payloads to this endpoint whenever recovery events occur with the Webhook channel enabled.
           </p>
 
@@ -472,15 +720,32 @@ export function NotificationPreferencesMatrix() {
             helperText="Must be a valid HTTP or HTTPS endpoint reachable by RecoverAI"
           />
 
-          {/* Security Notice */}
-          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-start gap-2.5">
-            <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-            <div className="text-xs text-slate-600 space-y-1">
-              <span className="font-semibold text-slate-900">Zero Secret Exposure &amp; Payload Verification:</span>
-              <p className="text-slate-500">
+          {/* Security & Verification Notice */}
+          <div className="p-3.5 rounded-xl bg-[#F7F8F6] border border-[#E5E9E6] flex items-start gap-3">
+            <ShieldCheck className="w-4 h-4 text-[#0B8F63] shrink-0 mt-0.5" />
+            <div className="text-xs text-[#667085] space-y-1">
+              <span className="font-semibold text-[#111318]">
+                Zero Secret Exposure &amp; Payload Verification:
+              </span>
+              <p className="text-[#667085] leading-relaxed">
                 Webhook payloads are cryptographically signed using HMAC-SHA256 sent via the{' '}
-                <code className="text-slate-800 font-mono bg-slate-100 px-1 py-0.5 rounded border border-slate-200">X-Recovery-Signature</code> header.
-                Signing secrets are securely persisted server-side and never exposed to frontend code or client state.
+                <code className="text-[#111318] font-mono bg-[#E5E9E6] px-1 py-0.5 rounded text-[11px]">
+                  X-Recovery-Signature
+                </code>{' '}
+                header. Signing secrets are securely persisted server-side and never exposed to frontend code or client state.
+              </p>
+            </div>
+          </div>
+
+          {/* Operational Safety Notice */}
+          <div className="p-3.5 rounded-xl bg-[#F7F8F6] border border-[#E5E9E6] flex items-start gap-3">
+            <Shield className="w-4 h-4 text-[#667085] shrink-0 mt-0.5" />
+            <div className="text-xs text-[#667085] space-y-1">
+              <span className="font-semibold text-[#111318]">
+                Fintech Delivery Safety Notice:
+              </span>
+              <p className="text-[#667085] leading-relaxed">
+                Notification preferences control multi-channel alert dispatch only. Toggling delivery channels does not execute payment retries, capture transactions, or alter algorithmic recovery strategy.
               </p>
             </div>
           </div>

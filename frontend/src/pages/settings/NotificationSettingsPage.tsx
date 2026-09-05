@@ -1,18 +1,11 @@
 import { NotificationPreferencesMatrix } from '../../components/settings/NotificationPreferencesMatrix';
+import { Footer } from '../../components/layout/Footer';
 
 export function NotificationSettingsPage() {
   return (
-    <div className="space-y-6 max-w-5xl">
-      <div className="space-y-1">
-        <h3 className="text-base font-semibold text-slate-900">
-          Notification Preferences &amp; Delivery Rules
-        </h3>
-        <p className="text-xs text-slate-500">
-          Configure which events trigger multi-channel alerts across email, webhooks, and the in-app notification center.
-        </p>
-      </div>
-
+    <div className="space-y-8 max-w-5xl font-inter animate-console-fade-in delay-1 pb-6">
       <NotificationPreferencesMatrix />
+      <Footer />
     </div>
   );
 }

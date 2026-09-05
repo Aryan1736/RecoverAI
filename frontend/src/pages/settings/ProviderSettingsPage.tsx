@@ -1,18 +1,12 @@
 import { ProviderHealthCard } from '../../components/settings/ProviderHealthCard';
+import { Footer } from '../../components/layout/Footer';
 
 export function ProviderSettingsPage() {
   return (
-    <div className="space-y-6 max-w-5xl">
-      <div className="space-y-1">
-        <h3 className="text-base font-semibold text-slate-900">
-          Upstream Provider Operational Status
-        </h3>
-        <p className="text-xs text-slate-500">
-          Telemetry and availability metrics across communications providers (WhatsApp, Email, SMS) and payment recovery gateways.
-        </p>
-      </div>
-
+    <div className="space-y-8 max-w-5xl font-inter animate-console-fade-in delay-1 pb-6">
       <ProviderHealthCard />
+      <Footer />
     </div>
   );
 }
+
